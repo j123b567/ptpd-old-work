@@ -1398,7 +1398,7 @@ msgPackAnnounce(Octet * buf, PtpClock * ptpClock)
 		flip16(ptpClock->clockQuality.offsetScaledLogVariance);
 	*(UInteger8 *) (buf + 52) = ptpClock->grandmasterPriority2;
 	copyClockIdentity((buf + 53), ptpClock->grandmasterIdentity);
-	/* resolve bugs #37 and #40 - alignment errors on pre ARMv6 */
+	/* resolve bugs #37 and #40 - alignment errors on ARMv5 */
 	stepsRemoved = flip16(ptpClock->stepsRemoved);
 	memcpy(buf + 61, &stepsRemoved, sizeof(UInteger16));
 	*(Enumeration8 *) (buf + 63) = ptpClock->timePropertiesDS.timeSource;
@@ -1437,7 +1437,7 @@ msgUnpackAnnounce(Octet * buf, MsgAnnounce * announce)
 		flip16(*(UInteger16 *) (buf + 50));
 	announce->grandmasterPriority2 = *(UInteger8 *) (buf + 52);
 	copyClockIdentity(announce->grandmasterIdentity, (buf + 53));
-	/* resolve bugs #37 and #40 - alignment errors on pre ARMv6 */
+	/* resolve bugs #37 and #40 - alignment errors on ARMv5 */
 	memcpy(&stepsRemoved, buf + 61, sizeof(UInteger16));
 	announce->stepsRemoved = flip16(stepsRemoved);
 	announce->timeSource = *(Enumeration8 *) (buf + 63);
