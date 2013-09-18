@@ -186,7 +186,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, const RunTim
 	Boolean previousLeap59 = FALSE, previousLeap61 = FALSE;
 	Integer16 previousUtcOffset = 0;
 
-	if (ptpClock->portState == PTP_SLAVE) {
+	if (ptpClock->portState == PTP_SLAVE || ptpClock->portState==PTP_PASSIVE) {
 		previousLeap59 = ptpClock->timePropertiesDS.leap59;
 		previousLeap61 = ptpClock->timePropertiesDS.leap61;
 		previousUtcOffset = ptpClock->timePropertiesDS.currentUtcOffset;
@@ -244,8 +244,10 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, const RunTim
 	 * PTP not ARB - spec section 7.2
 	 */
         if (ptpClock->timePropertiesDS.ptpTimescale &&
+	    (ptpClock->timePropertiesDS.currentUtcOffsetValid || rtOpts->alwaysRespectUtcOffset) &&
             (ptpClock->timePropertiesDS.currentUtcOffset != previousUtcOffset)) {
 		setKernelUtcOffset(ptpClock->timePropertiesDS.currentUtcOffset);
+		INFO("Set kernel UTC offset to %d\n", ptpClock->timePropertiesDS.currentUtcOffset);
         }
 #endif /* MOD_TAI */
 
