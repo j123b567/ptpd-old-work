@@ -1852,7 +1852,7 @@ loadCommandLineKeys(dictionary* dict, int argc,char** argv)
 	if (sscanf(argv[i],"--%[-_a-zA-Z0-9:]=%s",key,val)==2 ||
 	    sscanf(argv[i],"-%[-_a-zA-Z0-9:]=%s",key,val)==2) {
 	/* wipe the used argv entry so that getopt doesn't get confused */
-		argv[i]="--";
+		argv[i]="";
 	    } else
 	/*
 	 * there are no optional arguments for key:sec options - if there's no =,
@@ -1860,13 +1860,13 @@ loadCommandLineKeys(dictionary* dict, int argc,char** argv)
 	 */
 	if (sscanf(argv[i],"--%[-_a-zA-Z0-9:]",key)==1 ||
 	    sscanf(argv[i],"-%[-_a-zA-Z0-9:]",key)==1 ) {
-		argv[i]="--";
+		argv[i]="";
 		memset(val, 0, PATH_MAX);
 		if (i+1 < argc) {
 		    if( (argv[i+1][0]!='-') &&
 			( (strlen(argv[i+i]) > 1) && argv[i+1][1] !='-' )) {
 			strncpy(val,argv[i+1],PATH_MAX);
-			argv[i+1]="--";
+			argv[i+1]="";
 		    }
 		
 		}
