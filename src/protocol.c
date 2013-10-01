@@ -345,7 +345,7 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		ptpClock->logMinDelayReqInterval = rtOpts->initial_delayreq;
 
 		/* force a IGMP refresh per reset */
-		if (rtOpts->do_IGMP_refresh) {
+		if (rtOpts->do_IGMP_refresh && rtOpts->ip_mode != IPMODE_UNICAST) {
 			netRefreshIGMP(&ptpClock->netPath, rtOpts, ptpClock);
 		}
 		
