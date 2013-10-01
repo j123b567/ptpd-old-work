@@ -338,7 +338,7 @@
 		HELP_ITEM_COMPLETE(); \
 	} else {{\
 		char *tmpstring = iniparser_getstring(dict,key,default); \
-		strncpy(variable,tmpstring,sizeof(variable) / sizeof(char));\
+		if (variable!=tmpstring) strncpy(variable,tmpstring,sizeof(variable) / sizeof(char));\
 		dictionary_set(target, key, tmpstring);\
 		if(!STRING_EMPTY(helptext) && IS_SHOWDEFAULT()) {\
 			printComment(helptext);\
@@ -2042,7 +2042,7 @@ Boolean loadCommandLineOptions(RunTimeOpts* rtOpts, dictionary* dict, int argc, 
 	    {0,			0		 , 0, 0}
 	};
 
-	while ((c = getopt_long(argc, argv, "?c:kb:i:d:sgmGMWyUunf:S:r:DvCVHhe:Y:tOLEPAR:l", long_options, &opt_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "?c:kb:i:d:sgmGMWyUu:nf:S:r:DvCVHhe:Y:tOLEPAR:l", long_options, &opt_index)) != -1) {
 	    switch(c) {
 /* non-config options first */
 
