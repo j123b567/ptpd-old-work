@@ -1504,6 +1504,10 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath)
 Boolean
 netRefreshIGMP(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 {
+	if(rtOpts->ip_mode == IPMODE_UNICAST) {
+		return TRUE;
+	}
+	
 	DBG("netRefreshIGMP\n");
 	
 	netShutdownMulticast(netPath);
