@@ -2039,6 +2039,7 @@ Boolean loadCommandLineOptions(RunTimeOpts* rtOpts, dictionary* dict, int argc, 
 	    {"long-help",	no_argument,	   0, 'H'},
 	    {"explain",		required_argument, 0, 'e'},
 	    {"default-config",  optional_argument, 0, 'O'},
+	    {"unicast",		required_argument, 0, 'u'},
 	    {0,			0		 , 0, 0}
 	};
 
