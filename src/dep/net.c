@@ -626,8 +626,9 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	DBG("Listening on IP: %s\n",inet_ntoa(interfaceAddr));
 
 	if (rtOpts->pcap == TRUE) {
+		int promisc = (rtOpts->transport == IEEE_802_3 ) ? 1 : 0;
 		if ((netPath->pcapEvent = pcap_open_live(rtOpts->ifaceName,
-							 PACKET_SIZE, 0,
+							 PACKET_SIZE, promisc,
 							 PCAP_TIMEOUT,
 							 errbuf)) == NULL) {
 			PERROR("failed to open event pcap");
@@ -655,7 +656,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}		
 		if ((netPath->pcapGeneral = pcap_open_live(rtOpts->ifaceName,
-							   PACKET_SIZE, 0,
+							   PACKET_SIZE, promisc,
 							   PCAP_TIMEOUT,
 							 errbuf)) == NULL) {
 			PERROR("failed to open general pcap");
@@ -684,7 +685,13 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		}		
 	}
 	
-	if (rtOpts->transport != IEEE_802_3) {
+	if(rtOpts->transport == IEEE_802_3) {
+		close(netPath->eventSock);
+		netPath->eventSock = -1;
+		close(netPath->generalSock);
+		netPath->generalSock = -1;
+	} else {
+		
 		/* save interface address for IGMP refresh */
 		netPath->interfaceAddr = interfaceAddr;
 		
@@ -788,18 +795,18 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 		}
 
-		/* enable loopback */
-		temp = 1;
+			/* enable loopback */
+			temp = 1;
 
-		DBG("Going to set IP_MULTICAST_LOOP with %d \n", temp);
+			DBG("Going to set IP_MULTICAST_LOOP with %d \n", temp);
 
-		if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
-			       &temp, sizeof(int)) < 0
-		    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
-				  &temp, sizeof(int)) < 0) {
-			PERROR("Failed to enable multicast loopback");
-			return FALSE;
-		}
+			if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
+				       &temp, sizeof(int)) < 0
+			    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
+					  &temp, sizeof(int)) < 0) {
+				PERROR("Failed to enable multicast loopback");
+				return FALSE;
+			}
 
 		/* make timestamps available through recvmsg() */
 		if (!netInitTimestamping(netPath)) {
@@ -807,7 +814,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}
 	}
-
+	
 	return TRUE;
 }
 
@@ -838,8 +845,10 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 	}
 
 	FD_ZERO(readfds);
-	FD_SET(netPath->eventSock, readfds);
-	FD_SET(netPath->generalSock, readfds);
+	if (netPath->eventSock >=0) 
+		FD_SET(netPath->eventSock, readfds);
+	if (netPath->generalSock >=0)
+		FD_SET(netPath->generalSock, readfds);
 	if (netPath->pcapEvent != NULL)
 		FD_SET(netPath->pcapEventSock, readfds);
 	if (netPath->pcapGeneral != NULL)
@@ -1040,7 +1049,9 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath)
 		}
 	} else { /* Using PCAP */
 		/* Discard packet on socket */
-		recv(netPath->eventSock, buf, PACKET_SIZE, MSG_DONTWAIT);
+		if (netPath->eventSock >= 0) {
+			recv(netPath->eventSock, buf, PACKET_SIZE, MSG_DONTWAIT);
+		}
 		
 		if ((ret = pcap_next_ex(netPath->pcapEvent, &pkt_header, 
 					&pkt_data)) < 1) {
@@ -1205,7 +1216,8 @@ netRecvGeneral(Octet * buf, TimeInternal * time, NetPath * netPath)
 		}
 	} else { /* Using PCAP */
 		/* Discard packet on socket */
-		recv(netPath->generalSock, buf, PACKET_SIZE, MSG_DONTWAIT);
+		if (netPath->generalSock >= 0)
+			recv(netPath->generalSock, buf, PACKET_SIZE, MSG_DONTWAIT);
 		
 		if (( ret = pcap_next_ex(netPath->pcapGeneral, &pkt_header, 
 					 &pkt_data)) < 1) {
