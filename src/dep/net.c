@@ -683,108 +683,110 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}		
 	}
-	/* save interface address for IGMP refresh */
-	netPath->interfaceAddr = interfaceAddr;
 	
-	DBG("Local IP address used : %s \n", inet_ntoa(interfaceAddr));
+	if (rtOpts->transport != IEEE_802_3) {
+		/* save interface address for IGMP refresh */
+		netPath->interfaceAddr = interfaceAddr;
+		
+		DBG("Local IP address used : %s \n", inet_ntoa(interfaceAddr));
 
-	temp = 1;			/* allow address reuse */
-	if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_REUSEADDR, 
-		       &temp, sizeof(int)) < 0
-	    || setsockopt(netPath->generalSock, SOL_SOCKET, SO_REUSEADDR, 
-			  &temp, sizeof(int)) < 0) {
-		DBG("failed to set socket reuse\n");
-	}
-	/* bind sockets */
-	/*
-	 * need INADDR_ANY to allow receipt of multi-cast and uni-cast
-	 * messages
-	 */
-	if (rtOpts->jobid) {
-		if (inet_pton(AF_INET, DEFAULT_PTP_DOMAIN_ADDRESS, &addr.sin_addr) < 0) {
-			PERROR("failed to convert address");
+		temp = 1;			/* allow address reuse */
+		if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_REUSEADDR, 
+			       &temp, sizeof(int)) < 0
+		    || setsockopt(netPath->generalSock, SOL_SOCKET, SO_REUSEADDR, 
+				  &temp, sizeof(int)) < 0) {
+			DBG("failed to set socket reuse\n");
+		}
+		/* bind sockets */
+		/*
+		 * need INADDR_ANY to allow receipt of multi-cast and uni-cast
+		 * messages
+		 */
+		if (rtOpts->jobid) {
+			if (inet_pton(AF_INET, DEFAULT_PTP_DOMAIN_ADDRESS, &addr.sin_addr) < 0) {
+				PERROR("failed to convert address");
+				return FALSE;
+			}
+		} else
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(PTP_EVENT_PORT);
+		if (bind(netPath->eventSock, (struct sockaddr *)&addr, 
+			sizeof(struct sockaddr_in)) < 0) {
+			PERROR("failed to bind event socket");
 			return FALSE;
 		}
-	} else
-		addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(PTP_EVENT_PORT);
-	if (bind(netPath->eventSock, (struct sockaddr *)&addr, 
-		sizeof(struct sockaddr_in)) < 0) {
-		PERROR("failed to bind event socket");
-		return FALSE;
-	}
-	addr.sin_port = htons(PTP_GENERAL_PORT);
-	if (bind(netPath->generalSock, (struct sockaddr *)&addr, 
-		sizeof(struct sockaddr_in)) < 0) {
-		PERROR("failed to bind general socket");
-		return FALSE;
-	}
+		addr.sin_port = htons(PTP_GENERAL_PORT);
+		if (bind(netPath->generalSock, (struct sockaddr *)&addr, 
+			sizeof(struct sockaddr_in)) < 0) {
+			PERROR("failed to bind general socket");
+			return FALSE;
+		}
 
 #ifdef USE_BINDTODEVICE
 #ifdef linux
-	/*
-	 * The following code makes sure that the data is only
-	 * received on the specified interface.  Without this option,
-	 * it's possible to receive PTP from another interface, and
-	 * confuse the protocol.  Calling bind() with the IP address
-	 * of the device instead of INADDR_ANY does not work.
-	 *
-	 * More info:
-	 *   http://developerweb.net/viewtopic.php?id=6471
-	 *   http://stackoverflow.com/questions/1207746/problems-with-so-bindtodevice-linux-socket-option
-	 */
+		/*
+		 * The following code makes sure that the data is only
+		 * received on the specified interface.  Without this option,
+		 * it's possible to receive PTP from another interface, and
+		 * confuse the protocol.  Calling bind() with the IP address
+		 * of the device instead of INADDR_ANY does not work.
+		 *
+		 * More info:
+		 *   http://developerweb.net/viewtopic.php?id=6471
+		 *   http://stackoverflow.com/questions/1207746/problems-with-so-bindtodevice-linux-socket-option
+		 */
 
-	if ( rtOpts->ip_mode != IPMODE_HYBRID )
-	if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_BINDTODEVICE,
-			rtOpts->ifaceName, strlen(rtOpts->ifaceName)) < 0
-		|| setsockopt(netPath->generalSock, SOL_SOCKET, SO_BINDTODEVICE,
-			rtOpts->ifaceName, strlen(rtOpts->ifaceName)) < 0){
-		PERROR("failed to call SO_BINDTODEVICE on the interface");
-		return FALSE;
-	}
-#endif
-#endif
-
-	/* Set socket dscp */
-	if(rtOpts->dscpValue) {
-
-		if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_TOS,
-			 &rtOpts->dscpValue, sizeof(int)) < 0
-		    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_TOS,
-			&rtOpts->dscpValue, sizeof(int)) < 0) {
-			    PERROR("Failed to set socket DSCP bits");
-			    return FALSE;
-			}
-	}
-
-	/* send a uni-cast address if specified (useful for testing) */
-	if(!hostLookup(rtOpts->unicastAddress, &netPath->unicastAddr)) {
-                netPath->unicastAddr = 0;
-	}
-
-
-	if(rtOpts->ip_mode != IPMODE_UNICAST)  {
-
-		/* init UDP Multicast on both Default and Peer addresses */
-		if (!netInitMulticast(netPath, rtOpts))
-			return FALSE;
-
-		/* set socket time-to-live  */
-		if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL,
-			       &rtOpts->ttl, sizeof(int)) < 0
-		    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL,
-				  &rtOpts->ttl, sizeof(int)) < 0) {
-			PERROR("Failed to set socket multicast time-to-live");
+		if ( rtOpts->ip_mode != IPMODE_HYBRID )
+		if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_BINDTODEVICE,
+				rtOpts->ifaceName, strlen(rtOpts->ifaceName)) < 0
+			|| setsockopt(netPath->generalSock, SOL_SOCKET, SO_BINDTODEVICE,
+				rtOpts->ifaceName, strlen(rtOpts->ifaceName)) < 0){
+			PERROR("failed to call SO_BINDTODEVICE on the interface");
 			return FALSE;
 		}
+#endif
+#endif
 
-		/* start tracking TTL */
-		netPath->ttlEvent = rtOpts->ttl;
-		netPath->ttlGeneral = rtOpts->ttl;
+		/* Set socket dscp */
+		if(rtOpts->dscpValue) {
 
-	}
+			if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_TOS,
+				 &rtOpts->dscpValue, sizeof(int)) < 0
+			    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_TOS,
+				&rtOpts->dscpValue, sizeof(int)) < 0) {
+				    PERROR("Failed to set socket DSCP bits");
+				    return FALSE;
+				}
+		}
+
+		/* send a uni-cast address if specified (useful for testing) */
+		if(!hostLookup(rtOpts->unicastAddress, &netPath->unicastAddr)) {
+	                netPath->unicastAddr = 0;
+		}
+
+
+		if(rtOpts->ip_mode != IPMODE_UNICAST)  {
+
+			/* init UDP Multicast on both Default and Peer addresses */
+			if (!netInitMulticast(netPath, rtOpts))
+				return FALSE;
+
+			/* set socket time-to-live  */
+			if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL,
+				       &rtOpts->ttl, sizeof(int)) < 0
+			    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL,
+					  &rtOpts->ttl, sizeof(int)) < 0) {
+				PERROR("Failed to set socket multicast time-to-live");
+				return FALSE;
+			}
+
+			/* start tracking TTL */
+			netPath->ttlEvent = rtOpts->ttl;
+			netPath->ttlGeneral = rtOpts->ttl;
+
+		}
 
 		/* enable loopback */
 		temp = 1;
@@ -799,10 +801,11 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}
 
-	/* make timestamps available through recvmsg() */
-	if (!netInitTimestamping(netPath)) {
-		ERROR("failed to enable receive time stamps");
-		return FALSE;
+		/* make timestamps available through recvmsg() */
+		if (!netInitTimestamping(netPath)) {
+			ERROR("failed to enable receive time stamps");
+			return FALSE;
+		}
 	}
 
 	return TRUE;
