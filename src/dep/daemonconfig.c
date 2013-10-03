@@ -858,6 +858,8 @@ loadDefaultSettings( RunTimeOpts* rtOpts )
 	rtOpts->servoKP = 1000;
 	rtOpts->servoKI = 10;
 
+	rtOpts->servoDtMethod = DT_CONSTANT;
+
 	/* disabled by default */
 	rtOpts->announceTimeoutGracePeriod = 0;
 	rtOpts->alwaysRespectUtcOffset=FALSE;
@@ -1110,7 +1112,8 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 
 	CONFIG_MAP_SELECTVALUE("ptpengine:ip_mode", rtOpts->ip_mode, rtOpts->ip_mode,
 	"IP transmission mode (requires IP transport) - hybrid mode uses multicast for sync and announce,\n"
-	"	 and unicast for delay request / response",
+	"	 and unicast for delay request / response, unicast mode uses unicast for all transmission.\n"
+	"	 When unicast mode is selected, destination IP (ptpengine:unicast_address) must be configured.\n",
 				"multicast", 	IPMODE_MULTICAST,
 				"unicast", 	IPMODE_UNICAST,
 				"hybrid", 	IPMODE_HYBRID
@@ -1480,6 +1483,17 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	CONFIG_MAP_DOUBLE_MIN("servo:ki",rtOpts->servoKI,rtOpts->servoKI,
 	"Clock servo PI controller integral component gain (kI)",0.01);
 #endif /* PTPD_INTEGER_SERVO */
+
+	CONFIG_MAP_SELECTVALUE("servo:dt_method",rtOpts->servoDtMethod,rtOpts->servoDtMethod,
+		"How servo update interval (delta t) is calculated:\n"
+		"         none:     servo not corrected for update interval (dt always 1),\n"
+		"         constant: constant value (target servo update rate - sync interval for PTP,\n"
+		"         measured: servo measures how often it's updated and uses this interval.",
+			"none", DT_NONE,
+			"constant", DT_CONSTANT,
+			"measured", DT_MEASURED
+	);
+
 	CONFIG_MAP_INT_RANGE("servo:max_delay",rtOpts->maxDelay,rtOpts->maxDelay,
 		"Maximum accepted delayMS value in nanoseconds (Sync).\n"
 	"        0 =  not checked."
@@ -2269,9 +2283,10 @@ printShortHelp()
 			"-s --slaveonly	 	 	ptpengine:preset=slaveonly	Slave only mode\n"
 			"-m --masterslave 		ptpengine:preset=masterslave	Master, slave when not best GM\n"
 			"-M --masteronly 		ptpengine:preset=masteronly	Master, passive when not best GM\n"
-			"-y --hybrid			ptpengine:ip_mode=hybrid	Hybrid mode"
-			"\n"
-			"-u --unicast [IP]		ptpengine:ip_mode=unicast	Unicast mode for delay and response packets\n"
+			"-y --hybrid			ptpengine:ip_mode=hybrid	Hybrid mode (multicast for sync\n"
+			"								and announce, unicast for delay\n"
+			"								request and response)\n"
+			"-u --unicast [IP]		ptpengine:ip_mode=unicast	Unicast mode (send all messages to [IP])\n"
 			"				ptpengine:unicast_address=<IP>\n\n"
 			"-E --e2e			ptpengine:delay_mechanism=E2E	End to end delay detection\n"
 			"-P --p2p			ptpengine:delay_mechanism=P2P	Peer to peer delay detection\n"
@@ -2477,6 +2492,7 @@ int checkSubsystemRestart(dictionary* newConfig, dictionary* oldConfig)
 //        COMPONENT_RESTART_REQUIRED("servo:owdfilter_stiffness",         PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("servo:kp",   			PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("servo:ki",   			PTPD_RESTART_NONE );
+//        COMPONENT_RESTART_REQUIRED("servo:dt_method",			PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("servo:max_delay",    		PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("servo:max_delay",    		PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("servo:max_offset",   		PTPD_RESTART_NONE );
