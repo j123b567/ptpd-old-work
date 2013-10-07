@@ -598,6 +598,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	if (rtOpts->transport == IEEE_802_3) {
 		netPath->headerOffset = PACKET_BEGIN_ETHER;
 		netPath->etherDest = (struct ether_addr *)ether_aton(PTP_ETHER_DST);
+		netPath->peerEtherDest = (struct ether_addr *)ether_aton(PTP_ETHER_PEER);
 	} else
 		netPath->headerOffset = PACKET_BEGIN_UDP;
 
@@ -1263,7 +1264,18 @@ netRecvGeneral(Octet * buf, TimeInternal * time, NetPath * netPath)
 }
 
 
+ssize_t
+netSendPcapEther(Octet * buf,  UInteger16 length,
+			struct ether_addr * dst, struct ether_addr * src,
+			pcap_t * pcap) {
+	Octet ether[ETHER_HDR_LEN + PACKET_SIZE];
+	memcpy(ether, dst->octet, ETHER_ADDR_LEN);
+	memcpy(ether + ETHER_ADDR_LEN, src->octet, ETHER_ADDR_LEN);
+	*((short *)&ether[2 * ETHER_ADDR_LEN]) = htons(PTP_ETHER_TYPE);
+	memcpy(ether + ETHER_HDR_LEN, buf, length);
 
+	return pcap_inject(pcap, ether, ETHER_HDR_LEN + length);
+}
 
 
 //
@@ -1285,14 +1297,12 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
 	addr.sin_port = htons(PTP_EVENT_PORT);
 
 	if ((netPath->pcapEvent != NULL) && (rtOpts->transport == IEEE_802_3 )) {
-		Octet ether[ETHER_HDR_LEN + PACKET_SIZE];
-		memcpy(ether, netPath->etherDest->octet, ETHER_ADDR_LEN);
-		memcpy(ether + ETHER_ADDR_LEN,
-		       netPath->port_uuid_field, ETHER_ADDR_LEN);
-		*((short *)&ether[2 * ETHER_ADDR_LEN]) = htons(PTP_ETHER_TYPE);
-		memcpy(ether + ETHER_HDR_LEN, buf, length);
-		ret = pcap_inject(netPath->pcapEvent, ether,
-					 ETHER_HDR_LEN + length);
+
+		ret = netSendPcapEther(buf, length,
+			netPath->etherDest,
+			(struct ether_addr *)netPath->port_uuid_field,
+			netPath->pcapEvent);
+		
 		if (ret <= 0) 
 			DBG("Error sending ether multicast event message\n");
 		else
@@ -1364,14 +1374,11 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 	addr.sin_port = htons(PTP_GENERAL_PORT);
 
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
-		Octet ether[ETHER_HDR_LEN + PACKET_SIZE];
-		memcpy(ether, netPath->etherDest->octet, ETHER_ADDR_LEN);
-		memcpy(ether + ETHER_ADDR_LEN,
-		       netPath->port_uuid_field, ETHER_ADDR_LEN);
-		*((short *)&ether[2 * ETHER_ADDR_LEN]) = htons(PTP_ETHER_TYPE);
-		memcpy(ether + ETHER_HDR_LEN, buf, length);
-		ret = pcap_inject(netPath->pcapGeneral, ether,
-					 ETHER_HDR_LEN + length);
+		ret = netSendPcapEther(buf, length,
+			netPath->etherDest,
+			(struct ether_addr *)netPath->port_uuid_field,
+			netPath->pcapGeneral);
+
 		if (ret <= 0) 
 			DBG("Error sending ether multicast general message\n");
 		else
@@ -1420,7 +1427,7 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 }
 
 ssize_t 
-netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath)
+netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts *rtOpts)
 {
 
 	ssize_t ret;
@@ -1430,7 +1437,15 @@ netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_GENERAL_PORT);
 
-	if (netPath->unicastAddr) {
+	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
+		ret = netSendPcapEther(buf, length,
+			netPath->peerEtherDest,
+			(struct ether_addr *)netPath->port_uuid_field,
+			netPath->pcapGeneral);
+
+		if (ret <= 0) 
+			DBG("error sending ether multi-cast general message\n");
+	} else if (netPath->unicastAddr) {
 		addr.sin_addr.s_addr = netPath->unicastAddr;
 
 		ret = sendto(netPath->generalSock, buf, length, 0, 
@@ -1459,12 +1474,16 @@ netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath)
 		if (ret <= 0)
 			DBG("Error sending multicast peer general message\n");
 	}
+
+	if (ret > 0)
+		netPath->sentPackets++;
+	
 	return ret;
 
 }
 
 ssize_t 
-netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath)
+netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts *rtOpts)
 {
 	ssize_t ret;
 	struct sockaddr_in addr;
@@ -1472,7 +1491,15 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_EVENT_PORT);
 
-	if (netPath->unicastAddr) {
+	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
+		ret = netSendPcapEther(buf, length,
+			netPath->peerEtherDest,
+			(struct ether_addr *)netPath->port_uuid_field,
+			netPath->pcapEvent);
+
+		if (ret <= 0) 
+			DBG("error sending ether multi-cast general message\n");
+	} else if (netPath->unicastAddr) {
 		addr.sin_addr.s_addr = netPath->unicastAddr;
 
 		ret = sendto(netPath->eventSock, buf, length, 0, 
@@ -1516,6 +1543,10 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath)
 		else
 			netPath->sentPackets++;
 	}
+
+	if (ret > 0)
+		netPath->sentPackets++;
+
 	return ret;
 }
 

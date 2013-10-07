@@ -91,6 +91,7 @@ typedef struct {
 	int ttlGeneral;
 	int ttlEvent;
 	struct ether_addr *etherDest;
+	struct ether_addr *peerEtherDest;	
 } NetPath;
 
 typedef struct {

@@ -2528,7 +2528,7 @@ issuePDelayReq(RunTimeOpts *rtOpts,PtpClock *ptpClock)
 	
 	msgPackPDelayReq(ptpClock->msgObuf,&originTimestamp,ptpClock);
 	if (!netSendPeerEvent(ptpClock->msgObuf,PDELAY_REQ_LENGTH,
-			      &ptpClock->netPath)) {
+			      &ptpClock->netPath, rtOpts)) {
 		toState(PTP_FAULTY,rtOpts,ptpClock);
 		ptpClock->counters.messageSendErrors++;
 		DBGV("PdelayReq message can't be sent -> FAULTY state \n");
@@ -2550,7 +2550,7 @@ issuePDelayResp(const TimeInternal *tint,MsgHeader *header,RunTimeOpts *rtOpts,
 			  &requestReceiptTimestamp,ptpClock);
 
 	if (!netSendPeerEvent(ptpClock->msgObuf,PDELAY_RESP_LENGTH,
-			      &ptpClock->netPath)) {
+			      &ptpClock->netPath, rtOpts)) {
 		toState(PTP_FAULTY,rtOpts,ptpClock);
 		ptpClock->counters.messageSendErrors++;
 		DBGV("PdelayResp message can't be sent -> FAULTY state \n");
@@ -2599,7 +2599,7 @@ issuePDelayRespFollowUp(const TimeInternal *tint, MsgHeader *header,
 				  &responseOriginTimestamp,ptpClock);
 	if (!netSendPeerGeneral(ptpClock->msgObuf,
 				PDELAY_RESP_FOLLOW_UP_LENGTH,
-				&ptpClock->netPath)) {
+				&ptpClock->netPath, rtOpts)) {
 		toState(PTP_FAULTY,rtOpts,ptpClock);
 		ptpClock->counters.messageSendErrors++;
 		DBGV("PdelayRespFollowUp message can't be sent -> FAULTY state \n");
