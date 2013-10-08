@@ -380,7 +380,8 @@ updatePeerDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock 
 	DBGV("delay filter %d, %d\n", owd_filt->y, owd_filt->s_exp);
 
 display:
-	logStatistics(rtOpts, ptpClock);	
+	if(ptpClock->portState == PTP_SLAVE)
+		logStatistics(rtOpts, ptpClock);	
 }
 
 void
