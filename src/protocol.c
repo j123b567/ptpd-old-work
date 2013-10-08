@@ -1121,6 +1121,15 @@ process:
 	case DELAY_RESP:
 		st = "DelayResp";
 		break;
+	case PDELAY_REQ:
+		st = "PDelayReq";
+		break;
+	case PDELAY_RESP:
+		st = "PDelayResp";
+		break;
+	case PDELAY_RESP_FOLLOW_UP:
+		st = "PDelayRespFollowUp";
+		break;
 	case MANAGEMENT:
 		st = "Management";
 		break;
@@ -1955,7 +1964,7 @@ handlePDelayResp(const MsgHeader *header, TimeInternal *tint,
 				 header->sourcePortIdentity.portNumber);
 #endif	
 			if (ptpClock->sentPDelayReqSequenceId != 
-			       header->sequenceId) {
+			       ((UInteger16)(header->sequenceId + 1))) {
 				    DBGV("PDelayResp: sequence mismatch - sent: %d, received: %d\n",
 					    ptpClock->sentPDelayReqSequenceId,
 					    header->sequenceId);
