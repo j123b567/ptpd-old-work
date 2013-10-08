@@ -636,8 +636,8 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}
 		if (pcap_compile(netPath->pcapEvent, &program, 
-				 (rtOpts->transport == IEEE_802_3 ) ?
-				    "ether proto 0x88f7" :
+				 ( rtOpts->transport == IEEE_802_3 ) ?
+				    "ether proto 0x88f7":
 				 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
 					 "udp port 319" :
 				 "multicast and host 224.0.1.129 and udp port 319" ,
