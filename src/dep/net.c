@@ -636,8 +636,8 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			return FALSE;
 		}
 		if (pcap_compile(netPath->pcapEvent, &program, 
-				 ( rtOpts->transport == IEEE_802_3 ) ?
-				    "ether proto 0x88f7":
+				 (rtOpts->transport == IEEE_802_3 ) ?
+				    "ether proto 0x88f7" :
 				 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
 					 "udp port 319" :
 				 "multicast and host 224.0.1.129 and udp port 319" ,
@@ -663,27 +663,27 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			PERROR("failed to open general pcap");
 			return FALSE;
 		}
-		if (pcap_compile(netPath->pcapGeneral, &program,
-				 (rtOpts->transport == IEEE_802_3 ) ?
-				    "ether proto 0x88f7" :
-				 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
-					 "udp port 320" :
-				 "multicast and host 224.0.1.129 and udp port 320" ,
-				 1, 0) < 0) {
-			PERROR("failed to compile pcap general filter");
-			pcap_perror(netPath->pcapGeneral, "ptpd2");
-			return FALSE;
+		if (rtOpts->transport != IEEE_802_3) {
+			if (pcap_compile(netPath->pcapGeneral, &program,
+					 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
+						 "udp port 320" :
+					 "multicast and host 224.0.1.129 and udp port 320" ,
+					 1, 0) < 0) {
+				PERROR("failed to compile pcap general filter");
+				pcap_perror(netPath->pcapGeneral, "ptpd2");
+				return FALSE;
+			}
+			if (pcap_setfilter(netPath->pcapGeneral, &program) < 0) {
+				PERROR("failed to set pcap general filter");
+				return FALSE;
+			}
+			pcap_freecode(&program);
+			if ((netPath->pcapGeneralSock = 
+			     pcap_get_selectable_fd(netPath->pcapGeneral)) < 0) {
+				PERROR("failed to get pcap general fd");
+				return FALSE;
+			}
 		}
-		if (pcap_setfilter(netPath->pcapGeneral, &program) < 0) {
-			PERROR("failed to set pcap general filter");
-			return FALSE;
-		}
-		pcap_freecode(&program);
-		if ((netPath->pcapGeneralSock = 
-		     pcap_get_selectable_fd(netPath->pcapGeneral)) < 0) {
-			PERROR("failed to get pcap general fd");
-			return FALSE;
-		}		
 	}
 	
 	if(rtOpts->transport == IEEE_802_3) {
@@ -850,9 +850,9 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 		FD_SET(netPath->eventSock, readfds);
 	if (netPath->generalSock >=0)
 		FD_SET(netPath->generalSock, readfds);
-	if (netPath->pcapEvent != NULL)
+	if (netPath->pcapEventSock >= 0)
 		FD_SET(netPath->pcapEventSock, readfds);
-	if (netPath->pcapGeneral != NULL)
+	if (netPath->pcapGeneralSock >= 0)
 		FD_SET(netPath->pcapGeneralSock, readfds);
 
 	if (netPath->pcapGeneralSock > 0)
@@ -1296,12 +1296,15 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_EVENT_PORT);
 
-	if ((netPath->pcapEvent != NULL) && (rtOpts->transport == IEEE_802_3 )) {
+	/* In PCAP Ethernet mode, we use pcapEvent for receiving all messages 
+	 * and pcapGeneral for sending all messages
+	 */
+	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3 )) {
 
 		ret = netSendPcapEther(buf, length,
 			&netPath->etherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
-			netPath->pcapEvent);
+			netPath->pcapGeneral);
 		
 		if (ret <= 0) 
 			DBG("Error sending ether multicast event message\n");
@@ -1495,7 +1498,7 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts 
 		ret = netSendPcapEther(buf, length,
 			&netPath->peerEtherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
-			netPath->pcapEvent);
+			netPath->pcapGeneral);
 
 		if (ret <= 0) 
 			DBG("error sending ether multi-cast general message\n");

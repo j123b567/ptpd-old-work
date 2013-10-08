@@ -995,7 +995,7 @@ handle(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 	DBGV("handle: something\n");
 
 	if (rtOpts->pcap == TRUE) {
-		if (FD_ISSET(ptpClock->netPath.pcapEventSock, &readfds)) {
+		if (ptpClock->netPath.pcapEventSock && FD_ISSET(ptpClock->netPath.pcapEventSock, &readfds)) {
 			length = netRecvEvent(ptpClock->msgIbuf, &tint, 
 					      &ptpClock->netPath);
 			if (length == 0) /* timeout, return for now */
@@ -1008,7 +1008,7 @@ handle(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 			}
 			goto process;
 		}
-		if (FD_ISSET(ptpClock->netPath.pcapGeneralSock, &readfds)) {
+		if (ptpClock->netPath.pcapGeneralSock && FD_ISSET(ptpClock->netPath.pcapGeneralSock, &readfds)) {
 			length = netRecvGeneral(ptpClock->msgIbuf, &tint,
 						&ptpClock->netPath);
 			if (length == 0) /* timeout, return for now */
