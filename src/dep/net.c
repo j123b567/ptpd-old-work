@@ -597,8 +597,8 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 	if (rtOpts->transport == IEEE_802_3) {
 		netPath->headerOffset = PACKET_BEGIN_ETHER;
-		netPath->etherDest = (struct ether_addr *)ether_aton(PTP_ETHER_DST);
-		netPath->peerEtherDest = (struct ether_addr *)ether_aton(PTP_ETHER_PEER);
+		memcpy(netPath->etherDest.octet, ether_aton(PTP_ETHER_DST), ETHER_ADDR_LEN);
+		memcpy(netPath->peerEtherDest.octet, ether_aton(PTP_ETHER_PEER), ETHER_ADDR_LEN);
 	} else
 		netPath->headerOffset = PACKET_BEGIN_UDP;
 
@@ -1299,7 +1299,7 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
 	if ((netPath->pcapEvent != NULL) && (rtOpts->transport == IEEE_802_3 )) {
 
 		ret = netSendPcapEther(buf, length,
-			netPath->etherDest,
+			&netPath->etherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
 			netPath->pcapEvent);
 		
@@ -1375,7 +1375,7 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
-			netPath->etherDest,
+			&netPath->etherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
 			netPath->pcapGeneral);
 
@@ -1439,7 +1439,7 @@ netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpt
 
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
-			netPath->peerEtherDest,
+			&netPath->peerEtherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
 			netPath->pcapGeneral);
 
@@ -1493,7 +1493,7 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts 
 
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
-			netPath->peerEtherDest,
+			&netPath->peerEtherDest,
 			(struct ether_addr *)netPath->port_uuid_field,
 			netPath->pcapEvent);
 
