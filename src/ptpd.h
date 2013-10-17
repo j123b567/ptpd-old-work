@@ -57,6 +57,7 @@
 #include <ctype.h>
 #include <glob.h>
 #include <stddef.h>
+#include <stdint.h>
 #ifdef HAVE_UTMPX_H
 #include <utmpx.h>
 #else
@@ -81,6 +82,8 @@
 
 #include "constants.h"
 #include "limits.h"
+
+#include "dep/ipv4_acl.h"
 
 #include "dep/constants_dep.h"
 #include "dep/datatypes_dep.h"
@@ -298,6 +301,7 @@ void PTPText_display(const PTPText*, const PtpClock*);
 void iFaceName_display(const Octet*);
 void unicast_display(const Octet*);
 const char *portState_getName(Enumeration8 portState);
+void timestamp_display(const Timestamp * timestamp);
 
 void displayCounters(const PtpClock*);
 void displayStatistics(const PtpClock*);
