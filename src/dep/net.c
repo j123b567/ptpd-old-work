@@ -753,7 +753,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 				    "ether proto 0x88f7":
 				 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
 					 "udp port 319" :
-				 "multicast and host 224.0.1.129 and udp port 319" ,
+				 "host (224.0.1.129 or 224.0.0.107) and udp port 319" ,
 				 1, 0) < 0) {
 			PERROR("failed to compile pcap event filter");
 			pcap_perror(netPath->pcapEvent, "ptpd2");
@@ -780,7 +780,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			if (pcap_compile(netPath->pcapGeneral, &program,
 					 ( rtOpts->ip_mode != IPMODE_MULTICAST ) ?
 						 "udp port 320" :
-					 "multicast and host 224.0.1.129 and udp port 320" ,
+					 "host (224.0.1.129 or 224.0.0.107) and udp port 320" ,
 					 1, 0) < 0) {
 				PERROR("failed to compile pcap general filter");
 				pcap_perror(netPath->pcapGeneral, "ptpd2");
