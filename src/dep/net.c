@@ -804,6 +804,8 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		netPath->eventSock = -1;
 		close(netPath->generalSock);
 		netPath->generalSock = -1;
+		/* TX timestamp is not generated for PCAP mode and Ethernet transport */
+		netPath->txTimestampFailure = TRUE;
 	} else {
 		
 		/* save interface address for IGMP refresh */
