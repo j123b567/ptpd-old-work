@@ -981,25 +981,26 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 	}
 
 	FD_ZERO(readfds);
-	if (netPath->eventSock >=0) 
-		FD_SET(netPath->eventSock, readfds);
-	if (netPath->generalSock >=0)
-		FD_SET(netPath->generalSock, readfds);
-	if (netPath->pcapEventSock >= 0)
+	nfds = 0;
+	if (netPath->pcapEventSock >= 0) {
 		FD_SET(netPath->pcapEventSock, readfds);
-	if (netPath->pcapGeneralSock >= 0)
-		FD_SET(netPath->pcapGeneralSock, readfds);
+		if (netPath->pcapGeneralSock >= 0)
+			FD_SET(netPath->pcapGeneralSock, readfds);
 
-	if (netPath->pcapGeneralSock > 0)
-		nfds = netPath->pcapGeneralSock;
-	else 
-		if (netPath->pcapEventSock > netPath->pcapGeneralSock)
-			nfds = netPath->pcapEventSock;
-	else 
-		if (netPath->eventSock > netPath->generalSock)
-			nfds = netPath->eventSock;
-		else
+		nfds = netPath->pcapEventSock;
+		if (netPath->pcapEventSock < netPath->pcapGeneralSock)
+			nfds = netPath->pcapGeneralSock;
+
+	} else if (netPath->eventSock >= 0) {
+		FD_SET(netPath->eventSock, readfds);
+		if (netPath->generalSock >= 0)
+			FD_SET(netPath->generalSock, readfds);
+
+		nfds = netPath->eventSock;
+		if (netPath->eventSock < netPath->generalSock)
 			nfds = netPath->generalSock;
+
+	}
 	nfds++;
 
 #if defined PTPD_SNMP
