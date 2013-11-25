@@ -74,11 +74,13 @@
 #else
 #include <pcap.h>
 #endif
-#ifdef linux
-#ifdef HAVE_SCHED_H
+#if defined(linux) && defined(HAVE_SCHED_H)
 #include <sched.h>
-#endif /* HAVE_SCHED_H */
-#endif /* linux */
+#endif /* linux && HAVE_SCHED_H */
+
+#ifdef HAVE_SYS_CPUSET_H
+#include <sys/cpuset.h>
+#endif /* HAVE_SYS_CPUSET_H */
 
 #include "constants.h"
 #include "limits.h"
@@ -121,6 +123,9 @@
 #define min(a,b)     (((a)<(b))?(a):(b))
 #define max(a,b)     (((a)>(b))?(a):(b))
 
+#ifdef HAVE_LINUX_RTC_H
+#include <linux/rtc.h>
+#endif /* HAVE_LINUX_RTC_H */
 
 /** \name arith.c
  * -Timing management and arithmetic*/
@@ -305,6 +310,7 @@ void timestamp_display(const Timestamp * timestamp);
 
 void displayCounters(const PtpClock*);
 void displayStatistics(const PtpClock*);
+void clearCounters(PtpClock *);
 
 void msgHeader_display(const MsgHeader*);
 void msgAnnounce_display(const MsgAnnounce*);

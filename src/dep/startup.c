@@ -147,6 +147,14 @@ do_signal_sighup(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 	NOTIFY("SIGHUP received\n");
 
+#ifdef RUNTIME_DEBUG
+	if(rtOpts->transport == UDP_IPV4 && rtOpts->ip_mode != IPMODE_UNICAST) {
+		DBG("SIGHUP - running an ipv4 multicast based mode, re-sending IGMP joins\n");
+		netRefreshIGMP(&ptpClock->netPath, rtOpts, ptpClock);
+	}
+#endif /* RUNTIME_DEBUG */
+
+
 	/* if we don't have a config file specified, we're done - just reopen log files*/
 	if(strlen(rtOpts->configFile) ==  0)
 	    goto end;
@@ -201,8 +209,8 @@ do_signal_sighup(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 	}
 
-#ifdef linux
-#ifdef HAVE_SCHED_H
+
+#if defined(linux) && defined(HAVE_SCHED_H)
                     /* Changing the CPU affinity mask */
                     if(rtOpts->restartSubsystems & PTPD_CHANGE_CPUAFFINITY) {
                         NOTIFY("Applying CPU binding configuration: changing selected CPU core\n");
@@ -229,25 +237,43 @@ do_signal_sighup(RunTimeOpts * rtOpts, PtpClock * ptpClock)
                                 else
                                         INFO("Successfully unbound "PTPD_PROGNAME" from cpu core CPU core %d\n", rtOpts->cpuNumber);
                         }
-                    }
-#endif /* HAVE_SCHED_H */
-#endif /* linux */
+                   }
+#endif /* linux && HAVE_SCHED_H */
 
-	if(rtOpts->restartSubsystems & PTPD_RESTART_ACLS) {
-		NOTIFY("Applying access control list configuration\n");
-		/* re-compile ACLs */
-		freeIpv4AccessList(ptpClock->netPath.timingAcl);
-		freeIpv4AccessList(ptpClock->netPath.managementAcl);
-		if(rtOpts->timingAclEnabled) {
-			ptpClock->netPath.timingAcl=createIpv4AccessList(rtOpts->timingAclPermitText,
-				rtOpts->timingAclDenyText, rtOpts->timingAclOrder);
-		}
-		if(rtOpts->managementAclEnabled) {
-			freeIpv4AccessList(ptpClock->netPath.managementAcl);
-			ptpClock->netPath.managementAcl=createIpv4AccessList(rtOpts->managementAclPermitText,
-				rtOpts->managementAclDenyText, rtOpts->managementAclOrder);
-		}
-	}
+#ifdef HAVE_SYS_CPUSET_H
+	/* Changing the CPU affinity mask */
+		    if (rtOpts->restartSubsystems & PTPD_CHANGE_CPUAFFINITY) {
+			    NOTIFY("Applying CPU binding configuration:"
+				   "changing selected CPU core\n");
+			    cpuset_t mask;
+			    CPU_ZERO(&mask);
+			    if (tmpOpts.cpuNumber < 0) {
+				    if (cpuset_getaffinity(CPU_LEVEL_ROOT, CPU_WHICH_CPUSET, 1,
+							   sizeof(mask), &mask) < 0)
+					    PERROR("Could not get affinity.");
+				    if (cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID,
+							   -1, sizeof(mask), &mask) < 0)
+					    PERROR("Could not unbind from CPU core %d",
+						   rtOpts->cpuNumber);
+				    else
+					    INFO("Successfully unbound "
+						 PTPD_PROGNAME" from cpu core CPU core %d\n",
+						 rtOpts->cpuNumber);
+			    } else {
+				    CPU_SET(tmpOpts.cpuNumber,&mask);
+				    if (cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID,
+							   -1, sizeof(mask), &mask) < 0)  {
+					    PERROR("Could not bind to CPU core %d",
+							   tmpOpts.cpuNumber);
+					    rtOpts->restartSubsystems = -1;
+				    } else {
+					    INFO("Successfully bound "
+						 PTPD_PROGNAME" to CPU core %d\n",
+						 tmpOpts.cpuNumber);
+				    }
+			    }
+		    }
+#endif
 
 	if(rtOpts->restartSubsystems == -1) {
 		ERROR("New configuration cannot be applied - aborting reload\n");
@@ -327,8 +353,12 @@ checkSignals(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	}
 
 	if(sigusr1_received){
-		WARNING("SIGUSR1 received, stepping clock to current known OFM\n");
-		servo_perform_clock_step(rtOpts, ptpClock);
+	    if(ptpClock->portState == PTP_SLAVE){
+		    WARNING("SIGUSR1 received, stepping clock to current known OFM\n");
+		    servo_perform_clock_step(rtOpts, ptpClock);
+	    } else {
+		    ERROR("SIGUSR1 received - will not step clock, not in PTP_SLAVE state\n");
+	    }
 	sigusr1_received = 0;
 	}
 
@@ -371,6 +401,10 @@ checkSignals(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			INFO("\n\n");
 			INFO("** Management message ACL:\n");
 			dumpIpv4AccessList(ptpClock->netPath.managementAcl);
+		}
+		if(rtOpts->clearCounters) {
+			clearCounters(ptpClock);
+			NOTIFY("PTP engine counters cleared\n");
 		}
 		sigusr2_received = 0;
 	}
@@ -419,7 +453,7 @@ writeLockFile(RunTimeOpts * rtOpts)
 
 	int lockPid = 0;
 
-//	INFO("Checking lock file: %s\n", rtOpts->lockFile);
+	DBGV("Checking lock file: %s\n", rtOpts->lockFile);
 
 	if ( (G_lockFilePointer=fopen(rtOpts->lockFile, "w+")) == NULL) {
 		PERROR("Could not open lock file %s for writing", rtOpts->lockFile);
@@ -446,6 +480,7 @@ writeLockFile(RunTimeOpts * rtOpts)
 		goto failure;
 	}
 	INFO("Successfully acquired lock on %s\n", rtOpts->lockFile);
+	fflush(G_lockFilePointer);
 	return(1);
 	failure:
 	fclose(G_lockFilePointer);
@@ -469,6 +504,10 @@ ptpdShutdown(PtpClock * ptpClock)
 	if(ptpClock->msgTmpHeader.messageType == MANAGEMENT)
 		freeManagementTLV(&ptpClock->msgTmp.manage);
 	freeManagementTLV(&ptpClock->outgoingManageTmp);
+
+#ifdef PTPD_SNMP
+	snmpShutdown();
+#endif /* PTPD_SNMP */
 
 #if !defined(__APPLE__)
 #ifndef PTPD_STATISTICS
@@ -538,7 +577,8 @@ ptpdStartup(int argc, char **argv, Integer16 * ret, RunTimeOpts * rtOpts)
 	 * this was not the case for log files. This adds consistency
 	 * and allows to use FILE* vs. fds everywhere
 	 */
-	umask(DEFAULT_UMASK);
+	umask(~DEFAULT_FILE_PERMS);
+
 	/** 
 	 * If a required setting, such as interface name, or a setting
 	 * requiring a range check is to be set via getopts_long,
@@ -744,9 +784,7 @@ configcheck:
 		}
 	}
 
-#ifdef linux
-#ifdef HAVE_SCHED_H
-
+#if defined(linux) && defined(HAVE_SCHED_H)
 	/* Try binding to a single CPU core if configured to do so */
 
 	if(rtOpts->cpuNumber > -1) {
@@ -760,8 +798,26 @@ configcheck:
 		    INFO("Successfully bound "PTPD_PROGNAME" to CPU core %d\n", rtOpts->cpuNumber);
 		}
 	}
-#endif /* HAVE_SCHED_H */
-#endif /* linux */
+#endif /* linux && HAVE_SCHED_H */
+
+#ifdef HAVE_SYS_CPUSET_H
+
+	/* Try binding to a single CPU core if configured to do so */
+
+	if(rtOpts->cpuNumber > -1) {
+		cpuset_t mask;
+    		CPU_ZERO(&mask);
+    		CPU_SET(rtOpts->cpuNumber,&mask);
+    		if(cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID,
+				      -1, sizeof(mask), &mask) < 0) {
+			PERROR("Could not bind to CPU core %d",
+			       rtOpts->cpuNumber);
+		} else {
+			INFO("Successfully bound "PTPD_PROGNAME" to CPU core %d\n",
+			     rtOpts->cpuNumber);
+		}
+	}
+#endif /* HAVE_SYS_CPUSET_H */
 
 	/* use new synchronous signal handlers */
 	signal(SIGINT,  catchSignals);
@@ -774,7 +830,7 @@ configcheck:
 #if defined PTPD_SNMP
 	/* Start SNMP subsystem */
 	if (rtOpts->snmp_enabled)
-		snmpInit(ptpClock);
+		snmpInit(rtOpts, ptpClock);
 #endif
 
 

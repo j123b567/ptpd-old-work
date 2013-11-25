@@ -312,7 +312,8 @@ Boolean hostLookup(const char* hostname, Integer32* addr);
  * -Handle SNMP subsystem*/
  /**\{*/
 
-void snmpInit(PtpClock *);
+void snmpInit(RunTimeOpts *, PtpClock *);
+void snmpShutdown();
 
 /** \}*/
 #endif
@@ -371,6 +372,9 @@ void displayPortIdentity(PortIdentity *port, const char *prefixMessage);
 Boolean nanoSleep(TimeInternal*);
 void getTime(TimeInternal*);
 void setTime(TimeInternal*);
+#ifdef linux
+void setRtc(TimeInternal *);
+#endif /* linux */
 double getRand(void);
 int lockFile(int fd);
 int checkLockStatus(int fd, short lockType, int *lockPid);

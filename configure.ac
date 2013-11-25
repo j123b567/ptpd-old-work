@@ -2,9 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 m4_include([m4/version.m4])
-AC_PREREQ(2.61)
+AC_PREREQ(2.59)
 AC_INIT(
-    [ptpd2],
+    [ptpd],
     [VERSION_NUMBER],
     [ptpd-bugs@nwtime.org],
     [],
@@ -15,7 +15,7 @@ AC_CONFIG_HEADER([config.h])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([1.10 foreign -Wall])
+AM_INIT_AUTOMAKE([1.9 foreign -Wall])
 
 [RELEASE_DATE]="RELEASE_DATE"
 AC_SUBST([RELEASE_DATE])
@@ -145,6 +145,29 @@ esac
 AC_SUBST(PTP_SNMP)
 AM_CONDITIONAL([SNMP], [test x$ptpd_snmp_enabled = x1])
 
+case $host in
+*linux*)
+
+    AC_CHECK_HEADERS([linux/net_tstamp.h], [], [
+
+    if [ test -d "/usr/src/kernels/`uname -r`/include" ]; then
+	LINUX_KERNEL_INCLUDES="-I/usr/src/kernels/`uname -r`/include"
+	LINUX_KERNEL_HEADERS=yes
+    fi
+
+    if [ test -d "/usr/src/linux-headers-`uname -r`/include" ]; then
+	LINUX_KERNEL_INCLUDES="-I/usr/src/linux-headers-`uname -r`/include"
+	LINUX_KERNEL_HEADERS=yes
+    fi
+
+    ])
+
+    ;;
+esac
+
+AM_CONDITIONAL(LINUX_KERNEL_HEADERS, test x$LINUX_KERNEL_HEADERS = xyes)
+AC_SUBST(LINUX_KERNEL_INCLUDES)
+
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow])
 AC_CHECK_LIB([rt], [clock_gettime])
@@ -157,19 +180,33 @@ AC_CHECK_LIB(
 
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h netdb.h netinet/in.h netinet/ether.h stdlib.h string.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h syslog.h unistd.h glob.h sched.h utmp.h utmpx.h pcap/pcap.h pcap.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h netdb.h netinet/in.h netinet/ether.h stdlib.h string.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h syslog.h unistd.h glob.h sched.h utmp.h utmpx.h pcap/pcap.h pcap.h linux/rtc.h])
+
+# MUST chck for cpuset AFTER the check for param as the latter needs 
+# the former to pass the compile check.
+AC_CHECK_HEADERS([sys/cpuset.h], [], [],
+[#ifdef HAVE_SYS_PARAM_H
+# include <sys/param.h>
+#endif
+])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_HEADER_STDBOOL
-AC_TYPE_INT64_T
-AC_TYPE_SIZE_T
-AC_TYPE_SSIZE_T
 AC_HEADER_TIME
-AC_TYPE_UINT32_T
-AC_TYPE_UINT64_T
-AC_TYPE_UINT8_T
 AC_C_VOLATILE
+
+# Automake 2.59 has a problem with those on RHEL5
+m4_version_prereq(2.60,[
+    AC_TYPE_UINT32_T
+    AC_TYPE_UINT64_T
+    AC_TYPE_UINT8_T
+    AC_TYPE_SIZE_T
+    AC_TYPE_SSIZE_T
+    AC_TYPE_INT64_T
+    ],
+    [AC_TYPE_SIZE_T]
+)
 
 # Check for tick in the timex structure
 AC_CHECK_MEMBERS([struct timex.tick], [], [], [[#include <sys/timex.h>]])
@@ -184,7 +221,7 @@ AC_FUNC_STRFTIME
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([clock_gettime dup2 ftruncate gettimeofday inet_ntoa memset pow select socket strchr strdup strerror strtol glob pututline utmpxname updwtmpx])
 
-AC_CHECK_DECL(MSG_ERRQUEUE, [[#include <sys/socket.h]])
+AC_CHECK_DECLS([MSG_ERRQUEUE], [], [], [[#include <sys/socket.h>]])
 
 AC_MSG_CHECKING([for RUNTIME_DEBUG])
 AC_ARG_ENABLE(
@@ -206,8 +243,9 @@ case "$ptp_runtime" in
     AC_ARG_ENABLE(
         [debug-level],
         [AS_HELP_STRING(
-	    [--enable-debug-level={basic,medium,all}],
+	    [[[[--enable-debug-level={basic,medium,all}]]]],
 	    [debug message level: basic, medium, all]
+
         )],
         [ptp_dblevel=$enableval],
         [ptp_dblevel=no]
@@ -308,7 +346,7 @@ AC_MSG_CHECKING([for SIGUSR2 support])
 AC_ARG_ENABLE(
     [sigusr2],
     [AS_HELP_STRING(
-	[--enable-sigusr2={domain,debug,counters}],
+	[[[[--enable-sigusr2={domain,debug,counters}]]]],
 	[Enable SIGUSR2 support to: cycle PTP domain #, debug level or dump PTP engine counters (disabled by default)]
     )],
     [ptp_sigusr2=$enableval],
@@ -333,6 +371,5 @@ AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([src/Makefile])
 AC_CONFIG_FILES([src/ptpd2.8])
 AC_CONFIG_FILES([src/ptpd2.conf.5])
-AC_CONFIG_FILES([src/ptpd2.conf.8])
 
 AC_OUTPUT

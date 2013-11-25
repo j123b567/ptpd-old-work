@@ -797,7 +797,8 @@ writeStatusFile(PtpClock *ptpClock,RunTimeOpts *rtOpts, Boolean quiet)
 
 	fprintf(out, 		STATUSPREFIX"  %s\n","Interface", dictionary_get(rtOpts->currentConfig, "ptpengine:interface", ""));
 	fprintf(out, 		STATUSPREFIX"  %s\n","Preset", dictionary_get(rtOpts->currentConfig, "ptpengine:preset", ""));
-	fprintf(out, 		STATUSPREFIX"  %s\n","Transport", dictionary_get(rtOpts->currentConfig, "ptpengine:transport", ""));
+	fprintf(out, 		STATUSPREFIX"  %s%s\n","Transport", dictionary_get(rtOpts->currentConfig, "ptpengine:transport", ""),
+		(rtOpts->transport==UDP_IPV4 && rtOpts->pcap == TRUE)?" + libpcap":"");
 	if(rtOpts->transport != IEEE_802_3)
 	fprintf(out, 		STATUSPREFIX"  %s\n","IP mode", dictionary_get(rtOpts->currentConfig, "ptpengine:ip_mode", ""));
 	fprintf(out, 		STATUSPREFIX"  %s\n","Delay mechanism", dictionary_get(rtOpts->currentConfig, "ptpengine:delay_mechanism", ""));
@@ -1211,6 +1212,77 @@ setTime(TimeInternal * time)
 
 }
 
+#ifdef HAVE_LINUX_RTC_H
+
+/* Set the RTC to the desired time time */
+void setRtc(TimeInternal *timeToSet)
+{
+
+	static Boolean deviceFound = FALSE;
+	static char* rtcDev;
+	struct tm* tmTime;
+	time_t seconds;
+	int rtcFd;
+	struct stat statBuf;
+
+	if (!deviceFound) {
+	    if(stat("/dev/misc/rtc", &statBuf) == 0) {
+            	rtcDev="/dev/misc/rtc\0";
+		deviceFound = TRUE;
+	    } else if(stat("/dev/rtc", &statBuf) == 0) {
+            	rtcDev="/dev/rtc\0";
+		deviceFound = TRUE;
+	    }  else if(stat("/dev/rtc0", &statBuf) == 0) {
+            	rtcDev="/dev/rtc0\0";
+		deviceFound = TRUE;
+	    } else {
+
+			ERROR("Could not set RTC time - no suitable rtc device found\n");
+			return;
+	    }
+
+	    if(!S_ISCHR(statBuf.st_mode)) {
+			ERROR("Could not set RTC time - device %s is not a character device\n",
+			rtcDev);
+			deviceFound = FALSE;
+			return;
+	    }
+
+	}
+
+	DBGV("Usable RTC device: %s\n",rtcDev);
+
+	if(timeToSet->seconds == 0 && timeToSet->nanoseconds==0) {
+	    getTime(timeToSet);
+	}
+
+
+
+	if((rtcFd = open(rtcDev, O_RDONLY)) < 0) {
+		PERROR("Could not set RTC time: error opening %s", rtcDev);
+		return;
+	}
+
+	seconds = (time_t)timeToSet->seconds;
+	if(timeToSet->nanoseconds >= 500000) seconds++;
+	tmTime =  gmtime(&seconds);
+
+	DBGV("Set RTC from %d seconds to y: %d m: %d d: %d \n",timeToSet->seconds,tmTime->tm_year,tmTime->tm_mon,tmTime->tm_mday);
+
+	if(ioctl(rtcFd, RTC_SET_TIME, tmTime) < 0) {
+		PERROR("Could not set RTC time on %s - ioctl failed", rtcDev);
+		goto cleanup;
+	}
+
+	NOTIFY("Succesfully set RTC time using %s\n", rtcDev);
+
+cleanup:
+
+	close(rtcFd);
+
+}
+
+#endif /* HAVE_LINUX_RTC_H */
 
 /* returns a double beween 0.0 and 1.0 */
 double 
@@ -1619,7 +1691,16 @@ saveDrift(PtpClock * ptpClock, RunTimeOpts * rtOpts, Boolean quiet)
 
 	DBGV("saveDrift called\n");
 
+       if(ptpClock->portState == PTP_PASSIVE ||
+              ptpClock->portState == PTP_MASTER ||
+                ptpClock->clockQuality.clockClass < 128) {
+                    DBGV("We're not slave - not saving drift\n");
+                    return;
+            }
 
+        if(ptpClock->servo.observedDrift == 0.0 &&
+            ptpClock->portState == PTP_LISTENING )
+                return;
 
 	if (rtOpts->drift_recovery_method > 0) {
 		ptpClock->last_saved_drift = ptpClock->servo.observedDrift;

@@ -816,25 +816,32 @@ typedef struct {
 
 	Octet ifaceName[IFACE_NAME_LENGTH];
 	Boolean	noResetClock;
+#ifdef linux
+	Boolean setRtc;
+#endif /* linux */
+
+#ifdef DBG_SIGUSR2_DUMP_COUNTERS
+	Boolean clearCounters;
+#endif
+
+	Integer8 masterRefreshInterval;
+
 	Integer32 maxReset; /* Maximum number of nanoseconds to reset */
 	Integer32 maxDelay; /* Maximum number of nanoseconds of delay */
-	Integer32 origMaxDelay; /* Lower bound of nanoseconds of delay */
 	Boolean	noAdjust;
 
 	Boolean displayPackets;
 	Octet unicastAddress[MAXHOSTNAMELEN];
 	Integer16 s;
-	TimeInternal inboundLatency, outboundLatency;
+	TimeInternal inboundLatency, outboundLatency, ofmShift;
 	Integer16 max_foreign_records;
 	Enumeration8 delayMechanism;
 	Boolean	offset_first_updated;
 	int ttl;
 	int dscpValue;
-#ifdef linux
-#ifdef HAVE_SCHED_H
+#if (defined(linux) && defined(HAVE_SCHED_H)) || defined(HAVE_SYS_CPUSET_H)
 	int cpuNumber;
-#endif /* HAVE_SCHED_H */
-#endif /* linux */
+#endif /* linux && HAVE_SCHED_H || HAVE_SYS_CPUSET_H*/
 
 	Boolean alwaysRespectUtcOffset;
 	Boolean preferUtcValid;

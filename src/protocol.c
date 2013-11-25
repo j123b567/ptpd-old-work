@@ -90,8 +90,6 @@ static void processPDelayRespFromSelf(const TimeInternal * tint, RunTimeOpts * r
 
 void addForeign(Octet*,MsgHeader*,PtpClock*);
 
-void clearCounters(PtpClock *);
-
 /* loop forever. doState() has a switch for the actions and events to be
    checked for 'port_state'. the actions and events may or may not change
    'port_state' by calling toState(), but once they are done we loop around
@@ -170,8 +168,12 @@ protocol(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 			    }
 
 			    if(rtOpts->restartSubsystems & PTPD_RESTART_NETWORK) {
-				NOTIFY("Applying network configuration: going into PTPD_INITIALIZING\n");
+				NOTIFY("Applying network configuration: going into PTP_INITIALIZING\n");
 			    }
+			    /* Those two parameters have to be passed to ptpClock before re-init */
+			    ptpClock->clockQuality.clockClass = rtOpts->clockQuality.clockClass;
+			    ptpClock->slaveOnly = rtOpts->slaveOnly;
+
 			    toState(PTP_INITIALIZING, rtOpts, ptpClock);
 		    } else {
 		    /* Nothing happens here for now - SIGHUP handler does this anyway */
@@ -183,6 +185,22 @@ protocol(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		    if(rtOpts->restartSubsystems & PTPD_RESTART_LOGGING) {
 				NOTIFY("Applying logging configuration: restarting logging\n");
 		    }
+
+    		if(rtOpts->restartSubsystems & PTPD_RESTART_ACLS) {
+            		NOTIFY("Applying access control list configuration\n");
+            		/* re-compile ACLs */
+            		freeIpv4AccessList(ptpClock->netPath.timingAcl);
+            		freeIpv4AccessList(ptpClock->netPath.managementAcl);
+            		if(rtOpts->timingAclEnabled) {
+                    	    ptpClock->netPath.timingAcl=createIpv4AccessList(rtOpts->timingAclPermitText,
+                                rtOpts->timingAclDenyText, rtOpts->timingAclOrder);
+            		}
+            		if(rtOpts->managementAclEnabled) {
+                    	    ptpClock->netPath.managementAcl=createIpv4AccessList(rtOpts->managementAclPermitText,
+                                rtOpts->managementAclDenyText, rtOpts->managementAclOrder);
+            		}
+    		}
+
 
 #ifdef PTPD_STATISTICS
                     /* Reinitialising the outlier filter containers */
@@ -309,6 +327,7 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		timerStop(SYNC_INTERVAL_TIMER, ptpClock->itimer);  
 		timerStop(ANNOUNCE_INTERVAL_TIMER, ptpClock->itimer);
 		timerStop(PDELAYREQ_INTERVAL_TIMER, ptpClock->itimer); 
+		timerStop(MASTER_NETREFRESH_TIMER, ptpClock->itimer); 
 		break;
 		
 	case PTP_SLAVE:
@@ -468,6 +487,13 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 			   ptpClock->itimer);
 		timerStart(PDELAYREQ_INTERVAL_TIMER, 
 			   pow(2,ptpClock->logMinPdelayReqInterval), 
+			   ptpClock->itimer);
+		if( rtOpts->do_IGMP_refresh &&
+		    rtOpts->transport == UDP_IPV4 &&
+		    rtOpts->ip_mode != IPMODE_UNICAST &&
+		    rtOpts->masterRefreshInterval > 9 );
+			timerStart(MASTER_NETREFRESH_TIMER, 
+			   rtOpts->masterRefreshInterval, 
 			   ptpClock->itimer);
 		ptpClock->portState = PTP_MASTER;
 		displayStatus(ptpClock, "Now in state: ");
@@ -898,7 +924,7 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 			DBGV("event ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES\n");
 			issueAnnounce(rtOpts, ptpClock);
 		}
-		
+
 		if (ptpClock->delayMechanism == P2P) {
 			if (timerExpired(PDELAYREQ_INTERVAL_TIMER,
 					ptpClock->itimer)) {
@@ -906,13 +932,24 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 				issuePDelayReq(rtOpts,ptpClock);
 			}
 		}
-		
+
+		if(rtOpts->do_IGMP_refresh &&
+		    rtOpts->transport == UDP_IPV4 &&
+		    rtOpts->ip_mode != IPMODE_UNICAST &&
+		    rtOpts->masterRefreshInterval > 9 &&
+		    timerExpired(MASTER_NETREFRESH_TIMER, ptpClock->itimer)) {
+				DBGV("Master state periodic IGMP refresh - next in %d seconds...\n",
+				rtOpts->masterRefreshInterval);
+			       netRefreshIGMP(&ptpClock->netPath, rtOpts, ptpClock);
+
+		}
+
 		// TODO: why is handle() below expiretimer, while in slave is the opposite
 		handle(rtOpts, ptpClock);
 		
 		if (ptpClock->slaveOnly || ptpClock->clockQuality.clockClass == SLAVE_ONLY_CLOCK_CLASS)
 			toState(PTP_LISTENING, rtOpts, ptpClock);
-		
+
 		break;
 
 	case PTP_DISABLED:
@@ -1869,6 +1906,7 @@ handleDelayResp(const MsgHeader *header, ssize_t length,
 					
 					/* FIXME: the actual rearming of this timer with the new value only happens later in doState()/issueDelayReq() */
 				} else {
+
 					if (ptpClock->logMinDelayReqInterval != rtOpts->subsequent_delayreq) {
 						INFO("New Delay Request interval applied: %d (was: %d)\n",
 							rtOpts->subsequent_delayreq, ptpClock->logMinDelayReqInterval);
@@ -2852,7 +2890,6 @@ updateDatasets(PtpClock* ptpClock, RunTimeOpts* rtOpts)
 
 		/* We are master so update both the port and the parent dataset */
 		case PTP_MASTER:
-
 			ptpClock->numberPorts = NUMBER_PORTS;
 			ptpClock->delayMechanism = rtOpts->delayMechanism;
 			ptpClock->versionNumber = VERSION_PTP;
