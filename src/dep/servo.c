@@ -79,7 +79,6 @@ initClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 #endif /* HAVE_SYS_TIMEX_H */
 
 	/* clear vars */
-	ptpClock->owd_filt.s_exp = 0;	/* clears one-way delay filter */
 
 	/* clean more original filter variables */
 	clearTime(&ptpClock->offsetFromMaster);
@@ -87,11 +86,9 @@ initClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	clearTime(&ptpClock->delaySM);
 	clearTime(&ptpClock->delayMS);
 
-	ptpClock->ofm_filt.y           = 0;
-	ptpClock->ofm_filt.nsec_prev   = -1; /* AKB: -1 used for non-valid nsec time */
-	ptpClock->ofm_filt.nsec_prev   = 0;
+	FilterClear(ptpClock->owd_filt);	/* clears one-way delay filter */
+	FilterClear(ptpClock->ofm_filt);	/* clears offset from master filter */
 
-	ptpClock->owd_filt.s_exp       = 0;  /* clears one-way delay filter */
 	rtOpts->offset_first_updated   = FALSE;
 
 	ptpClock->char_last_msg='I';
@@ -105,7 +102,7 @@ initClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 }
 
 void
-updateDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField)
+updateDelay(Filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField)
 {
 
 	/* updates paused, leap second pending - do nothing */
@@ -174,8 +171,6 @@ updateDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * pt
 	 *   - calculate a new filtered MPD
 	 */
 	if (rtOpts->offset_first_updated) {
-		Integer16 s;
-
 		/*
 		 * calc 'slave_to_master_delay' (Master to Slave delay is
 		 * already computed in updateOffset )
@@ -225,7 +220,7 @@ updateDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * pt
 				"clearing filter\n");
 			INFO("Servo: Ignoring delayResp because of large OFM\n");
 			
-			owd_filt->s_exp = owd_filt->nsec_prev = 0;
+			FilterClear(owd_filt);
 			/* revert back to previous value */
 			ptpClock->meanPathDelay = prev_meanPathDelay;
 
@@ -246,31 +241,8 @@ updateDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * pt
 #endif /* PTPD_STATISTICS */
 		}
 
-		/* avoid overflowing filter */
-		s = rtOpts->s;
-		while (abs(owd_filt->y) >> (31 - s))
-			--s;
-
-		/* crank down filter cutoff by increasing 's_exp' */
-		if (owd_filt->s_exp < 1)
-			owd_filt->s_exp = 1;
-		else if (owd_filt->s_exp < 1 << s)
-			++owd_filt->s_exp;
-		else if (owd_filt->s_exp > 1 << s)
-			owd_filt->s_exp = 1 << s;
-
-		/* filter 'meanPathDelay' */
-		float fy =
-			(double)((owd_filt->s_exp - 1.0) *
-			owd_filt->y / (owd_filt->s_exp + 0.0) +
-			(ptpClock->meanPathDelay.nanoseconds / 2.0 + 
-			 owd_filt->nsec_prev / 2.0) / (owd_filt->s_exp + 0.0));
-
-		owd_filt->nsec_prev = ptpClock->meanPathDelay.nanoseconds;
-
-		owd_filt->y = round(fy);
-
-		ptpClock->meanPathDelay.nanoseconds = owd_filt->y;
+		FilterConfigure(owd_filt, "s", rtOpts->s);
+		ptpClock->meanPathDelay.nanoseconds = FilterFeed(owd_filt, ptpClock->meanPathDelay.nanoseconds);
 
 /* Update relevant statistics containers, feed outlier filter thresholds etc. */
 #ifdef PTPD_STATISTICS
@@ -291,7 +263,7 @@ statistics:
 #endif
 
 
-		DBGV("delay filter %d, %d\n", owd_filt->y, owd_filt->s_exp);
+		DBGV("delay filter %d\n", ptpClock->meanPathDelay.nanoseconds);
 	} else {
 		INFO("Ignoring delayResp because we didn't receive any sync yet\n");
 	}
@@ -303,10 +275,8 @@ display:
 }
 
 void
-updatePeerDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField, Boolean twoStep)
+updatePeerDelay(Filter * owd_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField, Boolean twoStep)
 {
-	Integer16 s;
-
 	/* updates paused, leap second pending - do nothing */
 	if(ptpClock->leapSecondInProgress)
 		return;
@@ -353,32 +323,14 @@ updatePeerDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock 
 
 	if (ptpClock->peerMeanPathDelay.seconds) {
 		/* cannot filter with secs, clear filter */
-		owd_filt->s_exp = owd_filt->nsec_prev = 0;
+		FilterClear(owd_filt);
 		return;
 	}
-	/* avoid overflowing filter */
-	s = rtOpts->s;
-	while (abs(owd_filt->y) >> (31 - s))
-		--s;
 
-	/* crank down filter cutoff by increasing 's_exp' */
-	if (owd_filt->s_exp < 1)
-		owd_filt->s_exp = 1;
-	else if (owd_filt->s_exp < 1 << s)
-		++owd_filt->s_exp;
-	else if (owd_filt->s_exp > 1 << s)
-		owd_filt->s_exp = 1 << s;
+	FilterConfigure(owd_filt, "s", rtOpts->s);
+	ptpClock->peerMeanPathDelay.nanoseconds = FilterFeed(owd_filt, ptpClock->peerMeanPathDelay.nanoseconds);
 
-	/* filter 'meanPathDelay' */
-	owd_filt->y = (owd_filt->s_exp - 1) * 
-		owd_filt->y / owd_filt->s_exp +
-		(ptpClock->peerMeanPathDelay.nanoseconds / 2 + 
-		 owd_filt->nsec_prev / 2) / owd_filt->s_exp;
-
-	owd_filt->nsec_prev = ptpClock->peerMeanPathDelay.nanoseconds;
-	ptpClock->peerMeanPathDelay.nanoseconds = owd_filt->y;
-
-	DBGV("delay filter %d, %d\n", owd_filt->y, owd_filt->s_exp);
+	DBGV("delay filter %d\n", ptpClock->peerMeanPathDelay.nanoseconds);
 
 //display:
 	if(ptpClock->portState == PTP_SLAVE)
@@ -387,7 +339,7 @@ updatePeerDelay(one_way_delay_filter * owd_filt, RunTimeOpts * rtOpts, PtpClock 
 
 void
 updateOffset(TimeInternal * send_time, TimeInternal * recv_time,
-    offset_from_master_filter * ofm_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField)
+    Filter * ofm_filt, RunTimeOpts * rtOpts, PtpClock * ptpClock, TimeInternal * correctionField)
 {
 
 	DBGV("UTCOffset: %d | leap 59: %d |  leap61: %d\n", 
@@ -475,28 +427,24 @@ updateOffset(TimeInternal * send_time, TimeInternal * recv_time,
 
 	if (ptpClock->offsetFromMaster.seconds) {
 		/* cannot filter with secs, clear filter */
-		ofm_filt->nsec_prev = 0;
+		FilterClear(ofm_filt);
 		rtOpts->offset_first_updated = TRUE;
 		return;
 	}
 
-	/* filter 'offsetFromMaster' */
-	ofm_filt->y = ptpClock->offsetFromMaster.nanoseconds / 2 + 
-		ofm_filt->nsec_prev / 2;
-	ofm_filt->nsec_prev = ptpClock->offsetFromMaster.nanoseconds;
-	ptpClock->offsetFromMaster.nanoseconds = ofm_filt->y;
+	ptpClock->offsetFromMaster.nanoseconds = FilterFeed(ofm_filt, ptpClock->offsetFromMaster.nanoseconds);
+
+	DBGV("offset filter %d\n", ptpClock->offsetFromMaster.nanoseconds);
 
 	/* Apply the offset shift */
 	subTime(&ptpClock->offsetFromMaster, &ptpClock->offsetFromMaster,
 	&rtOpts->ofmShift);
 
-	DBGV("offset filter %d\n", ofm_filt->y);
-
 	/*
 	 * Offset must have been computed at least one time before 
 	 * computing end to end delay
 	 */
-		rtOpts->offset_first_updated = TRUE;
+	rtOpts->offset_first_updated = TRUE;
 }
 
 void
