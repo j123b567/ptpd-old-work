@@ -1510,7 +1510,7 @@ adjFreq(double adj)
 #ifdef HAVE_STRUCT_TIMEX_TICK
 	Integer32 tickAdj = 0;
 
-#ifdef PTPD_DBGV
+#ifdef PTPD_DBG2
 	double oldAdj = adj;
 #endif
 
