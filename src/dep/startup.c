@@ -202,7 +202,7 @@ do_signal_sighup(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	/* If the network configuration has changed, check if the interface is OK */
 	if(rtOpts->restartSubsystems & PTPD_RESTART_NETWORK) {
 		INFO("Network configuration changed - checking interface\n");
-		if(!testInterface(tmpOpts.ifaceName)) {
+		if(!testInterface(tmpOpts.ifaceName, &tmpOpts)) {
 		    rtOpts->restartSubsystems = -1;
 		    ERROR("Error: Cannot use %s interface\n",tmpOpts.ifaceName);
 		}
@@ -362,34 +362,6 @@ checkSignals(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	sigusr1_received = 0;
 	}
 
-
-#ifdef DBG_SIGUSR2_CHANGE_DOMAIN
-	if(sigusr2_received){
-		/* swap domain numbers */
-		static int prev_domain;
-		static int first_time = 1;
-		if(first_time){
-			first_time = 0;
-			prev_domain = ptpClock->domainNumber + 1;
-		}
-
-		int  temp = ptpClock->domainNumber;
-		ptpClock->domainNumber = prev_domain;
-		prev_domain = temp;
-
-		
-		// propagate new choice as the run-time option
-		rtOpts->domainNumber = ptpClock->domainNumber;
-		
-		WARNING("SigUSR2 received. PTP_Domain is now %d  (saved: %d)\n",
-			ptpClock->domainNumber,
-			prev_domain
-		);
-		sigusr2_received = 0;
-	}
-#endif
-
-#ifdef DBG_SIGUSR2_DUMP_COUNTERS
 	if(sigusr2_received){
 		displayCounters(ptpClock);
 		if(rtOpts->timingAclEnabled) {
@@ -408,26 +380,7 @@ checkSignals(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		}
 		sigusr2_received = 0;
 	}
-#endif
 
-		
-#ifdef DBG_SIGUSR2_CHANGE_DEBUG
-#ifdef RUNTIME_DEBUG
-	if(sigusr2_received){
-		/* cycle debug levels, from INFO (=no debug) to Verbose */
-		INFO("Current debug level: %d\n", rtOpts->debug_level);
-		
-		(rtOpts->debug_level)++;
-		if(rtOpts->debug_level > LOG_DEBUGV ){
-			rtOpts->debug_level = LOG_INFO;
-	}
-
-		INFO("New debug level: %d\n", rtOpts->debug_level);
-	sigusr2_received = 0;
-	}
-#endif
-#endif
-	
 }
 
 #ifdef RUNTIME_DEBUG
@@ -509,17 +462,17 @@ ptpdShutdown(PtpClock * ptpClock)
 	snmpShutdown();
 #endif /* PTPD_SNMP */
 
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 #ifndef PTPD_STATISTICS
 	/* Not running statistics code - write observed drift to driftfile if enabled, inform user */
 	if(ptpClock->slaveOnly && !ptpClock->servo.runningMaxOutput)
 		saveDrift(ptpClock, &rtOpts, FALSE);
 #else
-	/* We are running statistics code - save drift on exit only if we're nor monitoring servo stability */
+	/* We are running statistics code - save drift on exit only if we're not monitoring servo stability */
 	if(!rtOpts.servoStabilityDetection && !ptpClock->servo.runningMaxOutput)
 		saveDrift(ptpClock, &rtOpts, FALSE);
 #endif /* PTPD_STATISTICS */
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 
 	if (rtOpts.currentConfig != NULL)
 		dictionary_del(rtOpts.currentConfig);
@@ -533,7 +486,9 @@ ptpdShutdown(PtpClock * ptpClock)
 	G_ptpClock = NULL;
 
 	/* properly clean lockfile (eventough new deaemons can acquire the lock after we die) */
-	fclose(G_lockFilePointer);
+	if(!rtOpts.ignore_daemon_lock && G_lockFilePointer != NULL) {
+	    fclose(G_lockFilePointer);
+	}
 	unlink(rtOpts.lockFile);
 
 	if(rtOpts.statusLog.logEnabled) {
@@ -660,7 +615,7 @@ ptpdStartup(int argc, char **argv, Integer16 * ret, RunTimeOpts * rtOpts)
 	dictionary_del(rtOpts->candidateConfig);
 
 	/* Check network before going into background */
-	if(!testInterface(rtOpts->ifaceName)) {
+	if(!testInterface(rtOpts->ifaceName, rtOpts)) {
 	    ERROR("Error: Cannot use %s interface\n",rtOpts->ifaceName);
 	    *ret = 1;
 	    goto configcheck;

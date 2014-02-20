@@ -53,16 +53,21 @@
 
 #include "../ptpd.h"
 
-#if defined(linux)
+#ifdef HAVE_NETINET_ETHER_H
 #  include <netinet/ether.h>
-#elif defined( __FreeBSD__ )
-#  include <net/ethernet.h>
-#elif defined( __NetBSD__ )
-#  include <net/if_ether.h>
-#elif defined( __OpenBSD__ )
-#  include <some ether header>  // force build error
 #endif
 
+#ifdef HAVE_NET_ETHERNET_H
+#  include <net/ethernet.h>
+#endif
+
+#ifdef HAVE_NET_IF_H
+#  include <net/if.h>
+#endif
+
+#ifdef HAVE_NET_IF_ETHER_H
+#  include <net/if_ether.h>
+#endif
 
 /* only C99 has the round function built-in */
 double round (double __x);
@@ -232,18 +237,17 @@ int ether_ntohost_cache(char *hostname, struct ether_addr *addr)
 	static struct ether_addr prev_addr;
 	static char buf[BUF_SIZE];
 
-#if defined(linux) || defined(__NetBSD__)
-	if (memcmp(addr->ether_addr_octet, &prev_addr, 
-		  sizeof(struct ether_addr )) != 0) {
-		valid = 0;
-	}
-#else // e.g. defined(__FreeBSD__)
+#ifdef HAVE_STRUCT_ETHER_ADDR_OCTET
 	if (memcmp(addr->octet, &prev_addr, 
 		  sizeof(struct ether_addr )) != 0) {
 		valid = 0;
 	}
+#else
+	if (memcmp(addr->ether_addr_octet, &prev_addr, 
+		  sizeof(struct ether_addr )) != 0) {
+		valid = 0;
+	}
 #endif
-
 	if (!valid) {
 		if(ether_ntohost(buf, addr)){
 			snprintf(buf, BUF_SIZE,"%s", "unknown");
@@ -258,7 +262,7 @@ int ether_ntohost_cache(char *hostname, struct ether_addr *addr)
 	}
 
 	valid = 1;
-	strcpy(hostname, buf);
+	strncpy(hostname, buf, 100);
 	return 0;
 }
 
@@ -276,10 +280,10 @@ snprint_ClockIdentity_ntohost(char *s, int max_len, const ClockIdentity id)
 	for (i = 0, j = 0; i< CLOCK_IDENTITY_LENGTH ; i++ ){
 		/* skip bytes 3 and 4 */
 		if(!((i==3) || (i==4))){
-#if defined(linux) || defined(__NetBSD__)
-			e.ether_addr_octet[j] = (uint8_t) id[i];
-#else // e.g. defined(__FreeBSD__)
+#ifdef HAVE_STRUCT_ETHER_ADDR_OCTET
 			e.octet[j] = (uint8_t) id[i];
+#else
+			e.ether_addr_octet[j] = (uint8_t) id[i];
 #endif
 			j++;
 		}
@@ -341,7 +345,7 @@ int writeMessage(FILE* destination, int priority, const char * format, va_list a
 		 *  handling synchronous, and not calling this function inside asycnhronous signal processing)
 		 */
 		gettimeofday(&now, 0);
-		strftime(time_str, MAXTIMESTR, "%F %X", localtime(&now.tv_sec));
+		strftime(time_str, MAXTIMESTR, "%F %X", localtime((time_t*)&now.tv_sec));
 		fprintf(destination, "%s.%06d ", time_str, (int)now.tv_usec  );
 		fprintf(destination,PTPD_PROGNAME"[%d].%s (%-9s ",
 		getpid(), startupInProgress ? "startup" : rtOpts.ifaceName,
@@ -412,7 +416,7 @@ logMessage(int priority, const char * format, ...)
 		if(!startupInProgress)
 		    goto end;
 		else
-		    goto stderr;
+		    goto std_err;
 	    }
 	}
 
@@ -442,9 +446,9 @@ logMessage(int priority, const char * format, ...)
 		if (!startupInProgress)
 			goto end;
 		else
-			goto stderr;
+			goto std_err;
 	}
-stderr:
+std_err:
 	va_start(ap, format);
 	/* Either all else failed or we're running in foreground - or we also log to stderr */
 	writeMessage(stderr, priority, format, ap);
@@ -971,7 +975,9 @@ else {
 
 	fprintf(out,		STATUSPREFIX"  ","Message rates");
 
-	if (ptpClock->logSyncInterval <= 0)
+	if (ptpClock->logSyncInterval == 0x7F)
+	    fprintf(out,"[UC-unknown]");
+	else if (ptpClock->logSyncInterval <= 0)
 	    fprintf(out,"%.0f/s",pow(2,-ptpClock->logSyncInterval));
 	else
 	    fprintf(out,"1/%.0fs",pow(2,ptpClock->logSyncInterval));
@@ -979,7 +985,9 @@ else {
 
 
 	if(ptpClock->delayMechanism == E2E) {
-		if (ptpClock->logMinDelayReqInterval <= 0)
+		if (ptpClock->logMinDelayReqInterval == 0x7F)
+		    fprintf(out,", [UC-unknown]");
+		else if (ptpClock->logMinDelayReqInterval <= 0)
 		    fprintf(out,", %.0f/s",pow(2,-ptpClock->logMinDelayReqInterval));
 		else
 		    fprintf(out,", 1/%.0fs",pow(2,ptpClock->logMinDelayReqInterval));
@@ -987,20 +995,22 @@ else {
 	}
 
 	if(ptpClock->delayMechanism == P2P) {
-		if (ptpClock->logMinPdelayReqInterval <= 0)
+		if (ptpClock->logMinPdelayReqInterval == 0x7F)
+		    fprintf(out,", [UC-unknown]");
+		else if (ptpClock->logMinPdelayReqInterval <= 0)
 		    fprintf(out,", %.0f/s",pow(2,-ptpClock->logMinPdelayReqInterval));
 		else
 		    fprintf(out,", 1/%.0fs",pow(2,ptpClock->logMinPdelayReqInterval));
 		fprintf(out, " pdelay");
 	}
 
-	if (ptpClock->logAnnounceInterval <= 0)
+	if (ptpClock->logAnnounceInterval == 0x7F)
+	    fprintf(out,", [UC-unknown]");
+	else if (ptpClock->logAnnounceInterval <= 0)
 	    fprintf(out,", %.0f/s",pow(2,-ptpClock->logAnnounceInterval));
 	else
 	    fprintf(out,", 1/%.0fs",pow(2,ptpClock->logAnnounceInterval));
 	fprintf(out, " announce");
-
-
 
 	    fprintf(out,"\n");
 
@@ -1482,8 +1492,9 @@ end:
 }
 
 
-/* Whole block of adjtimex() functions starts here - not for Apple */
-#if !defined(__APPLE__)
+/* Whole block of adjtimex() functions starts here - only for systems with sys/timex.h */
+
+#ifdef HAVE_SYS_TIMEX_H
 
 /*
  * Apply a tick / frequency shift to the kernel clock
@@ -1608,11 +1619,11 @@ restoreDrift(PtpClock * ptpClock, RunTimeOpts * rtOpts, Boolean quiet)
 	if (ptpClock->drift_saved && rtOpts->drift_recovery_method > 0 ) {
 		ptpClock->servo.observedDrift = ptpClock->last_saved_drift;
 		if (!rtOpts->noAdjust) {
-#if defined(__APPLE__)
+#ifndef HAVE_SYS_TIMEX_H
 			adjTime(-ptpClock->last_saved_drift);
 #else
 			adjFreq_wrapper(rtOpts, ptpClock, -ptpClock->last_saved_drift);
-#endif /* __APPLE__ */
+#endif /* HAVE_SYS_TIMEX_H */
 		}
 		DBG("loaded cached drift");
 		return;
@@ -1665,9 +1676,9 @@ restoreDrift(PtpClock * ptpClock, RunTimeOpts * rtOpts, Boolean quiet)
 
 	if (reset_offset) {
 		if (!rtOpts->noAdjust)
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 		  adjFreq_wrapper(rtOpts, ptpClock, 0);
-#endif /* __APPLE__ */
+#endif /* HAVE_SYS_TIMEX_H */
 		ptpClock->servo.observedDrift = 0;
 		return;
 	}
@@ -1677,9 +1688,9 @@ restoreDrift(PtpClock * ptpClock, RunTimeOpts * rtOpts, Boolean quiet)
 	ptpClock->drift_saved = TRUE;
 	ptpClock->last_saved_drift = recovered_drift;
 	if (!rtOpts->noAdjust)
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 		adjFreq(-recovered_drift);
-#endif /* __APPLE__ */
+#endif /* HAVE_SYS_TIMEX_H */
 }
 
 #undef DRIFTFORMAT
@@ -1907,6 +1918,6 @@ adjTime(Integer32 nanoseconds)
 
 }
 
-#endif /* __APPLE__ */
+#endif /* HAVE_SYS_TIMEX_H */
 
 

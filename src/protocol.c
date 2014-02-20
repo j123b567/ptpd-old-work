@@ -189,8 +189,8 @@ protocol(RunTimeOpts *rtOpts, PtpClock *ptpClock)
     		if(rtOpts->restartSubsystems & PTPD_RESTART_ACLS) {
             		NOTIFY("Applying access control list configuration\n");
             		/* re-compile ACLs */
-            		freeIpv4AccessList(ptpClock->netPath.timingAcl);
-            		freeIpv4AccessList(ptpClock->netPath.managementAcl);
+            		freeIpv4AccessList(&ptpClock->netPath.timingAcl);
+            		freeIpv4AccessList(&ptpClock->netPath.managementAcl);
             		if(rtOpts->timingAclEnabled) {
                     	    ptpClock->netPath.timingAcl=createIpv4AccessList(rtOpts->timingAclPermitText,
                                 rtOpts->timingAclDenyText, rtOpts->timingAclOrder);
@@ -339,10 +339,10 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 			timerStop(PDELAYREQ_INTERVAL_TIMER, ptpClock->itimer);
 /* If statistics are enabled, drift should have been saved already - otherwise save it*/
 #ifndef PTPD_STATISTICS
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 		/* save observed drift value, don't inform user */
 		saveDrift(ptpClock, rtOpts, TRUE);
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 #endif /* PTPD_STATISTICS */
 
 #ifdef PTPD_STATISTICS
@@ -491,7 +491,7 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		if( rtOpts->do_IGMP_refresh &&
 		    rtOpts->transport == UDP_IPV4 &&
 		    rtOpts->ip_mode != IPMODE_UNICAST &&
-		    rtOpts->masterRefreshInterval > 9 );
+		    rtOpts->masterRefreshInterval > 9 )
 			timerStart(MASTER_NETREFRESH_TIMER, 
 			   rtOpts->masterRefreshInterval, 
 			   ptpClock->itimer);
@@ -541,13 +541,13 @@ if(!rtOpts->panicModeNtp || !ptpClock->panicMode)
 #endif /* PTPD_NTPDC */
 
 		initClock(rtOpts, ptpClock);
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 		/*
 		 * restore the observed drift value using the selected method,
 		 * reset on failure or when -F 0 (default) is used, don't inform user
 		 */
 		restoreDrift(ptpClock, rtOpts, TRUE);
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 
 		ptpClock->waitingForFollow = FALSE;
 		ptpClock->waitingForDelayResp = FALSE;
@@ -602,7 +602,7 @@ if(!rtOpts->panicModeNtp || !ptpClock->panicMode)
 		timerStart(STATISTICS_UPDATE_TIMER, rtOpts->statsUpdateInterval, ptpClock->itimer);
 #endif /* PTPD_STATISTICS */
 
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 
 		/* 
 		 * leap second pending in kernel but no leap second 
@@ -618,7 +618,7 @@ if(!rtOpts->panicModeNtp || !ptpClock->panicMode)
 				"GM: aborting kernel leap second\n");
 			unsetTimexFlags(STA_INS | STA_DEL, TRUE);
 		}
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 		break;
 	default:
 		DBG("to unrecognized state\n");
@@ -668,11 +668,11 @@ doInit(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 	initTimer();
 	initClock(rtOpts, ptpClock);
 	setupPIservo(&ptpClock->servo, rtOpts);
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 	/* restore observed drift and inform user */
 	if(ptpClock->clockQuality.clockClass > 127)
 		restoreDrift(ptpClock, rtOpts, FALSE);
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 	m1(rtOpts, ptpClock );
 	msgPackHeader(ptpClock->msgObuf, ptpClock);
 	
@@ -872,7 +872,7 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
                             WARNING("Leap second event imminent - pausing "
 				    "clock and offset updates\n");
                             ptpClock->leapSecondInProgress = TRUE;
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
                             if(!checkTimexFlags(ptpClock->timePropertiesDS.leap61 ? 
 						STA_INS : STA_DEL)) {
                                     WARNING("Kernel leap second flags have "
@@ -881,7 +881,7 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
                                     setTimexFlags(ptpClock->timePropertiesDS.leap61 ? 
 						  STA_INS : STA_DEL, FALSE);
                             }
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 			    /*
 			     * start pause timer from now until [pause] after
 			     * midnight, plus an extra second if inserting
@@ -902,24 +902,18 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		}
 #endif /* PTPD_STATISTICS */
 
-
-
 		break;
 
 	case PTP_MASTER:
 		/*
 		 * handle SLAVE timers:
-		 *   - Time to send new Sync
 		 *   - Time to send new Announce
 		 *   - Time to send new PathDelay
+		 *   - Time to send new Sync (last order - so that follow-up always follows sync
+		 *     in two-step mode: improves interoperability
 		 *      (DelayResp has no timer - as these are sent and retransmitted by the slaves)
 		 */
-	
-		if (timerExpired(SYNC_INTERVAL_TIMER, ptpClock->itimer)) {
-			DBGV("event SYNC_INTERVAL_TIMEOUT_EXPIRES\n");
-			issueSync(rtOpts, ptpClock);
-		}
-		
+
 		if (timerExpired(ANNOUNCE_INTERVAL_TIMER, ptpClock->itimer)) {
 			DBGV("event ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES\n");
 			issueAnnounce(rtOpts, ptpClock);
@@ -944,9 +938,14 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 
 		}
 
+		if (timerExpired(SYNC_INTERVAL_TIMER, ptpClock->itimer)) {
+			DBGV("event SYNC_INTERVAL_TIMEOUT_EXPIRES\n");
+			issueSync(rtOpts, ptpClock);
+		}
+
 		// TODO: why is handle() below expiretimer, while in slave is the opposite
 		handle(rtOpts, ptpClock);
-		
+
 		if (ptpClock->slaveOnly || ptpClock->clockQuality.clockClass == SLAVE_ONLY_CLOCK_CLASS)
 			toState(PTP_LISTENING, rtOpts, ptpClock);
 
@@ -1038,26 +1037,32 @@ processMessage(RunTimeOpts* rtOpts, PtpClock* ptpClock, TimeInternal* timeStamp,
 	return;
     }
     msgUnpackHeader(ptpClock->msgIbuf, &ptpClock->msgTmpHeader);
+
     /* packet is not from self, and is from a non-zero source address - check ACLs */
     if(ptpClock->netPath.lastRecvAddr && 
 	(ptpClock->netPath.lastRecvAddr != ptpClock->netPath.interfaceAddr.s_addr)) {
 		struct in_addr in;
 		in.s_addr=ptpClock->netPath.lastRecvAddr;
 		if(ptpClock->msgTmpHeader.messageType == MANAGEMENT) {
-			if(rtOpts->timingAclEnabled && 
-				!matchIpv4AccessList(ptpClock->netPath.managementAcl, ntohl(ptpClock->netPath.lastRecvAddr))) {
+			if(rtOpts->managementAclEnabled) {
+			    if (!matchIpv4AccessList(
+				ptpClock->netPath.managementAcl, 
+				ntohl(ptpClock->netPath.lastRecvAddr))) {
 					DBG("ACL dropped management message from %s\n", inet_ntoa(in));
-					ptpClock->counters.aclTimingDiscardedMessages++;
-					return;
-			} else
-					DBG("ACL Accepted management message from %s\n", inet_ntoa(in));
-	        } else if(rtOpts->timingAclEnabled && 
-		    !matchIpv4AccessList(ptpClock->netPath.timingAcl, ntohl(ptpClock->netPath.lastRecvAddr))) {
-					DBG("ACL dropped timing message from %s\n", inet_ntoa(in));
 					ptpClock->counters.aclManagementDiscardedMessages++;
 					return;
-		} else
-					DBG("ACL accepted timing message from %s\n", inet_ntoa(in));
+				} else
+					DBG("ACL Accepted management message from %s\n", inet_ntoa(in));
+			}
+	        } else if(rtOpts->timingAclEnabled) {
+			if(!matchIpv4AccessList(ptpClock->netPath.timingAcl, 
+			    ntohl(ptpClock->netPath.lastRecvAddr))) {
+				DBG("ACL dropped timing message from %s\n", inet_ntoa(in));
+				ptpClock->counters.aclTimingDiscardedMessages++;
+				return;
+			} else
+				DBG("ACL accepted timing message from %s\n", inet_ntoa(in));
+		}
     }
 
     if (ptpClock->msgTmpHeader.versionPTP != ptpClock->versionNumber) {
@@ -1214,6 +1219,7 @@ handle(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 
     DBGV("handle: something\n");
 
+#ifdef PTPD_PCAP
     if (rtOpts->pcap == TRUE) {
 	if (ptpClock->netPath.pcapEventSock >=0 && FD_ISSET(ptpClock->netPath.pcapEventSock, &readfds)) {
 	    length = netRecvEvent(ptpClock->msgIbuf, &timeStamp, 
@@ -1241,6 +1247,7 @@ handle(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 	    processMessage(rtOpts, ptpClock, &timeStamp, length);
 	}
     } else {
+#endif
 	if (FD_ISSET(ptpClock->netPath.eventSock, &readfds)) {
 	    length = netRecvEvent(ptpClock->msgIbuf, &timeStamp, 
 		          &ptpClock->netPath, 0);
@@ -1263,7 +1270,9 @@ handle(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 	    }
 	    processMessage(rtOpts, ptpClock, &timeStamp, length);
 	}
+#ifdef PTPD_PCAP
     }
+#endif
 
 }
 
@@ -1337,9 +1346,9 @@ handleAnnounce(MsgHeader *header, ssize_t length,
 					ptpClock->leapSecondInProgress=FALSE;
 					ptpClock->timePropertiesDS.leap59 = FALSE;
 					ptpClock->timePropertiesDS.leap61 = FALSE;
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 					unsetTimexFlags(STA_INS | STA_DEL, TRUE);
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 				}
 			}
 			DBG2("___ Announce: received Announce from current Master, so reset the Announce timer\n");
@@ -1768,7 +1777,6 @@ handleDelayReq(const MsgHeader *header, ssize_t length,
 			// remember IP address of this client for hybrid mode
 			ptpClock->LastSlaveAddr = ptpClock->netPath.lastRecvAddr;
 
-					
 			issueDelayResp(tint,&ptpClock->delayReqHeader,
 				       rtOpts,ptpClock);
 			break;
@@ -2476,6 +2484,11 @@ handleManagement(MsgHeader *header,
 		ptpClock->counters.discardedMessages++;
 	}
 
+        /* If the management message we received was unicast, we also reply with unicast */
+        if((header->flagField0 & PTP_UNICAST) == PTP_UNICAST)
+                ptpClock->LastSlaveAddr = ptpClock->netPath.lastRecvAddr;
+        else ptpClock->LastSlaveAddr = 0;
+
 	/* send management message response or acknowledge */
 	if(ptpClock->outgoingManageTmp.tlv->tlvType == TLV_MANAGEMENT) {
 		if(ptpClock->outgoingManageTmp.actionField == RESPONSE ||
@@ -2726,11 +2739,13 @@ issueDelayResp(const TimeInternal *tint,MsgHeader *header,RunTimeOpts *rtOpts, P
 
 	Integer32 dst = 0;
 
-	if (rtOpts->ip_mode == IPMODE_HYBRID) {
+	/* hybrid mode: if request was unicast, reply unicast - if not, not */
+	if ( (rtOpts->ip_mode == IPMODE_HYBRID) &&
+	     (header->flagField0 & PTP_UNICAST) == PTP_UNICAST) {
 		dst = ptpClock->LastSlaveAddr;
 	}
 
-	if (!netSendGeneral(ptpClock->msgObuf,PDELAY_RESP_LENGTH,
+	if (!netSendGeneral(ptpClock->msgObuf, DELAY_RESP_LENGTH,
 			    &ptpClock->netPath, rtOpts, dst)) {
 		toState(PTP_FAULTY,rtOpts,ptpClock);
 		ptpClock->counters.messageSendErrors++;
@@ -2778,6 +2793,8 @@ static void
 issueManagementRespOrAck(MsgManagement *outgoing, RunTimeOpts *rtOpts,
 		PtpClock *ptpClock)
 {
+	Integer32 dst = 0;
+
 	/* pack ManagementTLV */
 	msgPackManagementTLV( ptpClock->msgObuf, outgoing, ptpClock);
 
@@ -2788,8 +2805,12 @@ issueManagementRespOrAck(MsgManagement *outgoing, RunTimeOpts *rtOpts,
 
 	msgPackManagement( ptpClock->msgObuf, outgoing, ptpClock);
 
+	/* If LastSlaveAddr was populated, we reply via Unicast */
+	if (ptpClock->LastSlaveAddr > 0)
+		dst = ptpClock->LastSlaveAddr;
+
 	if(!netSendGeneral(ptpClock->msgObuf, outgoing->header.messageLength,
-			   &ptpClock->netPath, rtOpts, 0)) {
+			   &ptpClock->netPath, rtOpts, dst)) {
 		DBGV("Management response/acknowledge can't be sent -> FAULTY state \n");
 		ptpClock->counters.messageSendErrors++;
 		toState(PTP_FAULTY, rtOpts, ptpClock);
@@ -2802,6 +2823,8 @@ issueManagementRespOrAck(MsgManagement *outgoing, RunTimeOpts *rtOpts,
 static void
 issueManagementErrorStatus(MsgManagement *outgoing, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 {
+	Integer32 dst = 0;
+
 	/* pack ManagementErrorStatusTLV */
 	msgPackManagementErrorStatusTLV( ptpClock->msgObuf, outgoing, ptpClock);
 
@@ -2812,8 +2835,11 @@ issueManagementErrorStatus(MsgManagement *outgoing, RunTimeOpts *rtOpts, PtpCloc
 
 	msgPackManagement( ptpClock->msgObuf, outgoing, ptpClock);
 
+	if (ptpClock->LastSlaveAddr > 0)
+		dst = ptpClock->LastSlaveAddr;
+
 	if(!netSendGeneral(ptpClock->msgObuf, outgoing->header.messageLength,
-			   &ptpClock->netPath, rtOpts, 0)) {
+			   &ptpClock->netPath, rtOpts, dst)) {
 		DBGV("Management error status can't be sent -> FAULTY state \n");
 		ptpClock->counters.messageSendErrors++;
 		toState(PTP_FAULTY, rtOpts, ptpClock);

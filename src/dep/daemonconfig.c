@@ -200,6 +200,16 @@
 	    parseResult = FALSE;\
 	 }
 
+#define CONFIG_KEY_VALUE_FORBIDDEN(key,condition,stringval,message) \
+	if ( (condition) && \
+	    CONFIG_ISSET(key) ) \
+	 { \
+	    if(!IS_QUIET())\
+		ERROR("Configuration error: option \"%s=%s\" cannot be used: \n%s", key, stringval, message); \
+	    parseResult = FALSE;\
+	 }
+
+
 #define CONFIG_KEY_TRIGGER(key,variable,value, otherwise) \
 	if (CONFIG_ISSET(key) ) \
 	 { \
@@ -801,11 +811,7 @@ loadDefaultSettings( RunTimeOpts* rtOpts )
 	rtOpts->timeProperties.frequencyTraceable = FALSE;
 	rtOpts->timeProperties.ptpTimescale = FALSE;
 
-#ifdef PTPD_EXPERIMENTAL
-	rtOpts->mcast_group_Number = 0;
-#endif
 	rtOpts->ip_mode = IPMODE_MULTICAST;
-	
 
 	rtOpts->noAdjust = NO_ADJUST;  // false
 	rtOpts->logStatistics = TRUE;
@@ -838,9 +844,7 @@ loadDefaultSettings( RunTimeOpts* rtOpts )
 	rtOpts->setRtc		 = FALSE;
 #endif /* HAVE_LINUX_RTC_H */
 
-#ifdef DBG_SIGUSR2_DUMP_COUNTERS
 	rtOpts->clearCounters = FALSE;
-#endif /* DBG_SIGUSR2_DUMP_COUNTERS */
 	rtOpts->statisticsLogInterval = 0;
 
 	rtOpts->initial_delayreq = DEFAULT_DELAYREQ_INTERVAL;
@@ -858,7 +862,7 @@ loadDefaultSettings( RunTimeOpts* rtOpts )
 	rtOpts->slaveOnly = FALSE;
 	/* Otherwise default to slave only via the preset */
 	rtOpts->selectedPreset = PTP_PRESET_SLAVEONLY;
-	rtOpts->jobid=FALSE;
+	rtOpts->pidAsClockId = FALSE;
 
 	/* highest possible */
 	rtOpts->logLevel = LOG_ALL;
@@ -880,7 +884,7 @@ loadDefaultSettings( RunTimeOpts* rtOpts )
 	/* Try 46 for expedited forwarding */
 	rtOpts->dscpValue = 0;
 
-#if (defined(linux) && defined(HAVE_SHED_H)) || defined(HAVE_SYS_CPUSET_H)
+#if (defined(linux) && defined(HAVE_SCHED_H)) || defined(HAVE_SYS_CPUSET_H)
 	rtOpts-> cpuNumber = -1;
 #endif /* (linux && HAVE_SCHED_H) || HAVE_SYS_CPUSET_H*/
 
@@ -1126,7 +1130,25 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 
 	ptpPreset = getPtpPreset(rtOpts->selectedPreset, rtOpts);
 
-	CONFIG_MAP_SELECTVALUE("ptpengine:ip_mode", rtOpts->ip_mode, rtOpts->ip_mode,		
+
+	CONFIG_MAP_SELECTVALUE("ptpengine:transport",rtOpts->transport,rtOpts->transport,
+		"Transport type for PTP packets. Ethernet transport requires libpcap support.",
+				"ipv4",		UDP_IPV4,
+#if 0
+				"ipv6",		UDP_IPV6,
+#endif
+				"ethernet", 	IEEE_802_3
+				);
+
+#ifdef PTPD_PCAP
+	/* ethernet mode - cannot specify IP mode */
+	CONFIG_KEY_CONDITIONAL_CONFLICT("ptpengine:ip_mode",
+	 			    rtOpts->transport == IEEE_802_3,
+	 			    "ethernet",
+	 			    "ptpengine:ip_mode");
+#endif
+
+	CONFIG_MAP_SELECTVALUE("ptpengine:ip_mode", rtOpts->ip_mode, rtOpts->ip_mode,
 		"IP transmission mode (requires IP transport) - hybrid mode uses\n"
 	"	 multicast for sync and announce, and unicast for delay request and\n"
 	"	 response; unicast mode uses unicast for all transmission.\n"
@@ -1137,21 +1159,7 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 				"hybrid", 	IPMODE_HYBRID
 				);
 
-	CONFIG_MAP_SELECTVALUE("ptpengine:transport",rtOpts->transport,rtOpts->transport,
-		"Transport type for PTP packets.",
-				"ipv4",		UDP_IPV4,
-#if 0
-				"ipv6",		UDP_IPV6,
-#endif
-				"ethernet", 	IEEE_802_3
-				);
-
-	/* ethernet mode - cannot specify IP mode */
-	CONFIG_KEY_CONDITIONAL_CONFLICT("ptpengine:ip_mode",
-				    rtOpts->transport == IEEE_802_3,
-				    "ethernet",
-				    "ptpengine:ip_mode");
-
+#ifdef PTPD_PCAP
 	CONFIG_MAP_BOOLEAN("ptpengine:use_libpcap",rtOpts->pcap,rtOpts->pcap,
 		"Use libpcap for sending and receiving traffic (automatically enabled\n"
 	"	 in Ethernet mode).");
@@ -1159,9 +1167,25 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	/* in ethernet mode, activate pcap and overwrite previous setting */
 	CONFIG_KEY_CONDITIONAL_TRIGGER(rtOpts->transport==IEEE_802_3,rtOpts->pcap,TRUE,rtOpts->pcap);
 
+#else
+	if(CONFIG_ISTRUE("ptpengine:use_libpcap"))
+	INFO("Libpcap support disabled or not available. Please install libpcap,\n"
+	     "build without --disable-pcap, or try building with ---with-pcap-config\n"
+	     " to use ptpengine:use_libpcap.\n");
+
+	/* cannot set ethernet transport without libpcap */
+	CONFIG_KEY_VALUE_FORBIDDEN("ptpengine:transport",
+				    rtOpts->transport == IEEE_802_3,
+				    "ethernet",
+	    "Libpcap support disabled or not available. Please install libpcap,\n"
+	     "build without --disable-pcap, or try building with ---with-pcap-config\n"
+	     "to use Ethernet transport. "PTPD_PROGNAME" was built with no libpcap support.\n");
+
+#endif /* PTPD_PCAP */
+
 	CONFIG_MAP_SELECTVALUE("ptpengine:delay_mechanism",rtOpts->delayMechanism,rtOpts->delayMechanism,
 		 "Delay detection mode used - use DELAY_DISABLED for syntonisation only\n"
-	"	 (no synchronisation).",
+	"	 (no full synchronisation).",
 				"E2E",		E2E,	
 				"P2P",		P2P,
 				"DELAY_DISABLED", DELAY_DISABLED
@@ -1340,14 +1364,16 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 
 	/* hybrid mode -> should specify delayreq interval: override set in the bottom of this function */
 	CONFIG_KEY_CONDITIONAL_WARNING(rtOpts->ip_mode == IPMODE_HYBRID,
-	"ptpengine:log_delayreq_interval",
-	"It is recommended to set the delay request interval (ptpengine:log_delayreq_interval) in hybrid mode");
+    		    "ptpengine:log_delayreq_interval",
+		    "It is recommended to set the delay request interval (ptpengine:log_delayreq_interval) in hybrid mode"
+	);
 
-	/* unicast mode -> must specify delayreq interval if we can become a slave */
-	CONFIG_KEY_CONDITIONAL_DEPENDENCY("ptpengine:ip_mode",
-				    rtOpts->ip_mode == IPMODE_UNICAST && rtOpts->clockQuality.clockClass > 127,
-				    "unicast",
-				    "ptpengine:log_delayreq_interval");
+	/* unicast mode -> should specify delayreq interval if we can become a slave */
+	CONFIG_KEY_CONDITIONAL_WARNING(rtOpts->ip_mode == IPMODE_UNICAST &&
+		    rtOpts->clockQuality.clockClass > 127,
+		    "ptpengine:log_delayreq_interval",
+		    "It is recommended to set the delay request interval (ptpengine:log_delayreq_interval) in unicast mode"
+	);
 	/* 
 	 * TODO: this should only be required in master mode - in unicast slave mode,
 	 * we should be sending delay requests to the IP of the current master, just
@@ -1386,17 +1412,6 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	CONFIG_MAP_INT_RANGE("ptpengine:ip_dscp",rtOpts->dscpValue,rtOpts->dscpValue,
 		"DiffServ CodepPoint for packet prioritisation (decimal). When set to zero, \n"
 	"	 this option is not used. Use 46 for Expedited Forwarding (0x2e).",0,63);
-
-
-#ifdef PTPD_EXPERIMENTAL
-	CONFIG_MAP_INT_RANGE("ptpengine:alt_mcast_group",rtOpts->mcast_group_Number,rtOpts->mcast_group_Number,
-	"Use PTP alternative multicast group like PTPv1:\n"
-	"0 = 224.0.1.129, 1 = 224.0.1.130, 2 = 224.0.1.131, 3 = 224.0.1.132.",0,3);
-#else	
-	if(!IS_QUIET() && CONFIG_ISSET("ptpengine:alt_mcast_group"))
-	INFO("PTPv1 multicast group support not enabled. Please compile with PTPD_EXPERIMENTAL \n"
-		    "to use ptpengine:v1style_mcast_group.");
-#endif /* PTPD_EXPERIMENTAL */
 
 #ifdef PTPD_STATISTICS
 
@@ -1470,8 +1485,8 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	"	 0 = not used.",0,NANOSECONDS_MAX);
 
 
-	CONFIG_MAP_BOOLEAN("ptpengine:pid_as_clock_idendity",rtOpts->jobid,rtOpts->jobid,
-	"Use JobID (PID) for UUID.");
+	CONFIG_MAP_BOOLEAN("ptpengine:pid_as_clock_identity",rtOpts->pidAsClockId,rtOpts->pidAsClockId,
+	"Use PTPd's process ID as the middle part of the PTP clock ID - useful for running multiple instances.");
 
 #ifdef PTPD_NTPDC
 
@@ -1500,12 +1515,8 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 
 #endif /* PTPD_NTPDC */
 
-#ifdef DBG_SIGUSR2_DUMP_COUNTERS
 	CONFIG_MAP_BOOLEAN("ptpengine:sigusr2_clears_counters",rtOpts->clearCounters,rtOpts->clearCounters,
-		"When compiled with --enable-sigusr2=counters, clear counters after dumping\n"
-		"all counter values.");
-#endif /* DBG_SIGUSR2_DUMP_COUNTERS */
-
+		"Clear counters after dumping all counter values on SIGUSR2.");
 
 	/* Defining the ACLs enables ACL matching */
 	CONFIG_KEY_TRIGGER("ptpengine:timing_acl_permit",rtOpts->timingAclEnabled,TRUE,rtOpts->timingAclEnabled);
@@ -1893,15 +1904,6 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	/* Check timing packet ACLs */
 	if(rtOpts->timingAclEnabled) {
 
-		/*
-		 * if we're here, then one of the ACLs is non-empty - so the
-		 * other one can be made a catch-all if empty
-		 */
-		if (strcmp(rtOpts->timingAclPermitText, "") == 0)
-		    strncpy(rtOpts->timingAclPermitText,"0.0.0.0/0",10);
-		if (strcmp(rtOpts->timingAclDenyText, "") == 0)
-		    strncpy(rtOpts->timingAclDenyText,"0.0.0.0/0",10);
-
 		int pResult, dResult;
 
 		if((pResult = maskParser(rtOpts->timingAclPermitText, NULL)) == -1)
@@ -1924,16 +1926,6 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 
 	/* Check management message ACLs */
 	if(rtOpts->managementAclEnabled) {
-
-		/*
-		 * if we're here, then one of the ACLs is non-empty - so the
-		 * other one can be made a catch-all if empty
-		 */
-
-		if (strcmp(rtOpts->managementAclPermitText, "") == 0)
-		    strncpy(rtOpts->managementAclPermitText,"0.0.0.0/0",10);
-		if (strcmp(rtOpts->managementAclDenyText, "") == 0)
-		    strncpy(rtOpts->managementAclDenyText,"0.0.0.0/0",10);
 
 		int pResult, dResult;
 
@@ -1967,6 +1959,15 @@ parseConfig ( dictionary* dict, RunTimeOpts *rtOpts )
 	 */
 	if((rtOpts->ip_mode == IPMODE_HYBRID) &&
 	 !CONFIG_ISSET("ptpengine:log_delayreq_interval"))
+		rtOpts->ignore_delayreq_interval_master=TRUE;
+
+	/*
+	 * We're in unicast slave-capable mode and we haven't specified the delay request interval:
+	 * use override with a default value
+	 */
+	if((rtOpts->ip_mode == IPMODE_UNICAST && 
+	    rtOpts->clockQuality.clockClass > 127) &&
+	    !CONFIG_ISSET("ptpengine:log_delayreq_interval"))
 		rtOpts->ignore_delayreq_interval_master=TRUE;
 
 	/*
@@ -2297,7 +2298,7 @@ short_help:
 			WARN_DEPRECATED('b', 'i', "interface", "ptpengine:interface");
 		case 'i':
 			/* if we got a number here, we've been given the domain number */
-			if( (c=='i') && strlen(optarg) > 0 && isdigit(optarg[0]) ) {
+			if( (c=='i') && strlen(optarg) > 0 && isdigit((unsigned char)optarg[0]) ) {
 				WARN_DEPRECATED_COMMENT('i', 'd', "domain", "ptpengine:domain",
 				"for specifying domain number ");
 				dictionary_set(dict,"ptpengine:domain", optarg);
@@ -2372,7 +2373,12 @@ short_help:
 			break;
 		/* print version string */
 		case 'v':
-			printf(PTPD_PROGNAME" version "USER_VERSION"\n");
+			printf(PTPD_PROGNAME" version "USER_VERSION
+#ifdef CODE_REVISION
+			CODE_REVISION
+#endif
+			"\n");
+
 			return FALSE;
 		/* run in foreground */
 		case 'C':
@@ -2578,12 +2584,9 @@ printLongHelp()
 		"Handled signals:\n"
 		"  SIGHUP         Reload configuration file and close / re-open log files\n"
 		"  SIGUSR1        Manually step clock to current OFM value\n"
-		"                (overides clock:no_reset, but honors clock:no_adjust)\n"
-		"  SIGUSR2        Behaviour based on ./configure --enable-sigusr2=[value]:"
-		"\n"
-		"         domain: Swap domain between current and current + 1\n"
-		"          debug: Cycle run-time debug level (requires RUNTIME_DEBUG)\n"
-		"       counters: Dump all PTP protocol counters to current log target\n"
+		"                 (overides clock:no_reset, but honors clock:no_adjust)\n"
+		"  SIGUSR2	  Dump all PTP protocol counters to current log target\n"
+		"                 (and clear if ptpengine:sigusr2_clears_counters set)\n"
 		"\n"
 		"  SIGINT|SIGTERM Close open files, remove lock file and exit cleanly\n"
 		"  SIGKILL        Force an unclean exit\n"
@@ -2643,14 +2646,16 @@ int checkSubsystemRestart(dictionary* newConfig, dictionary* oldConfig)
         COMPONENT_RESTART_REQUIRED("ptpengine:preset",  		PTPD_RESTART_PROTOCOL );
         COMPONENT_RESTART_REQUIRED("ptpengine:ip_mode",       		PTPD_RESTART_NETWORK );
         COMPONENT_RESTART_REQUIRED("ptpengine:transport",     		PTPD_RESTART_NETWORK );
+#ifdef PTPD_PCAP
         COMPONENT_RESTART_REQUIRED("ptpengine:use_libpcap",   		PTPD_RESTART_NETWORK );
+#endif
         COMPONENT_RESTART_REQUIRED("ptpengine:delay_mechanism",        	PTPD_RESTART_PROTOCOL );
         COMPONENT_RESTART_REQUIRED("ptpengine:domain",    		PTPD_RESTART_PROTOCOL );
 //        COMPONENT_RESTART_REQUIRED("ptpengine:inbound_latency",       PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("ptpengine:outbound_latency",      PTPD_RESTART_NONE );
 //        COMPONENT_RESTART_REQUIRED("ptpengine:offset_shift",      	PTPD_RESTART_NONE );
 
-        COMPONENT_RESTART_REQUIRED("ptpengine:pid_as_clock_idendity", 	PTPD_RESTART_PROTOCOL );
+        COMPONENT_RESTART_REQUIRED("ptpengine:pid_as_clock_identity", 	PTPD_RESTART_PROTOCOL );
         COMPONENT_RESTART_REQUIRED("ptpengine:ptp_slaveonly",           PTPD_RESTART_PROTOCOL );
         COMPONENT_RESTART_REQUIRED("ptpengine:log_announce_interval",   PTPD_UPDATE_DATASETS );
         COMPONENT_RESTART_REQUIRED("ptpengine:announce_receipt_timeout",        PTPD_UPDATE_DATASETS );
@@ -2686,9 +2691,6 @@ int checkSubsystemRestart(dictionary* newConfig, dictionary* oldConfig)
 //        COMPONENT_RESTART_REQUIRED("ptpengine:igmp_refresh",         	PTPD_RESTART_NONE );
         COMPONENT_RESTART_REQUIRED("ptpengine:multicast_ttl",        		PTPD_RESTART_NETWORK );
         COMPONENT_RESTART_REQUIRED("ptpengine:ip_dscp",        		PTPD_RESTART_NETWORK );
-
-        COMPONENT_RESTART_REQUIRED("ptpengine:alt_mcast_group",       	PTPD_RESTART_NETWORK );
-
 
 #ifdef PTPD_SNMP
         COMPONENT_RESTART_REQUIRED("global:enable_snmp",       	PTPD_RESTART_DAEMON );

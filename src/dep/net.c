@@ -1,4 +1,6 @@
 /*-
+ * Copyright (c) 2014	   Wojciech Owczarek,
+ *			   George V. Neville-Neil
  * Copyright (c) 2012-2013 George V. Neville-Neil,
  *                         Wojciech Owczarek.
  * Copyright (c) 2011-2012 George V. Neville-Neil,
@@ -54,6 +56,7 @@
 
 #include "../ptpd.h"
 
+#ifdef PTPD_PCAP
 #ifdef HAVE_PCAP_PCAP_H
 #include <pcap/pcap.h>
 #else /* !HAVE_PCAP_PCAP_H */
@@ -62,20 +65,14 @@
 #include <pcap.h>
 #endif /* HAVE_PCAP_H */
 #endif
-
 #define PCAP_TIMEOUT 1 /* expressed in milliseconds */
+#endif
 
 #if defined PTPD_SNMP
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #endif
-#if HAVE_NETINET_ETHER_H
-#include <netinet/ether.h>
-#else /* !HAVE_NETINET_ETHER_H */
-#include <net/ethernet.h>
-#endif /* HAVE_NETINET_ETHER_H */
-
 
 /* choose kernel-level nanoseconds or microseconds resolution on the client-side */
 #if !defined(SO_TIMESTAMPING) && !defined(SO_TIMESTAMPNS) && !defined(SO_TIMESTAMP) && !defined(SO_BINTIME)
@@ -134,6 +131,20 @@ netShutdownMulticast(NetPath * netPath)
 	return TRUE;
 }
 
+/*
+ * For future use: Check if IPv4 address is multiast -
+ * If last 4 bits of an address are 0xE (1110), it's multicast
+ */
+/*
+static Boolean
+isIpMulticast(struct in_addr in)
+{
+        if((ntohl(in.s_addr) >> 28) == 0x0E )
+	    return TRUE;
+	return FALSE;
+}
+*/
+
 /* shut down the UDP stuff */
 Boolean 
 netShutdown(NetPath * netPath)
@@ -143,14 +154,15 @@ netShutdown(NetPath * netPath)
 	netPath->unicastAddr = 0;
 
 	/* Close sockets */
-	if (netPath->eventSock > 0)
+	if (netPath->eventSock >= 0)
 		close(netPath->eventSock);
 	netPath->eventSock = -1;
 
-	if (netPath->generalSock > 0)
+	if (netPath->generalSock >= 0)
 		close(netPath->generalSock);
 	netPath->generalSock = -1;
 
+#ifdef PTPD_PCAP
 	if (netPath->pcapEvent != NULL) {
 		pcap_close(netPath->pcapEvent);
 		netPath->pcapEventSock = -1;
@@ -159,260 +171,324 @@ netShutdown(NetPath * netPath)
 		pcap_close(netPath->pcapGeneral);
 		netPath->pcapGeneralSock = -1;
 	}
+#endif
 
-	freeIpv4AccessList(netPath->timingAcl);
-	freeIpv4AccessList(netPath->managementAcl);
+	freeIpv4AccessList(&netPath->timingAcl);
+	freeIpv4AccessList(&netPath->managementAcl);
 
 	return TRUE;
 }
 
+/* Check if interface ifaceName exists. Return 1 on success, 0 when interface doesn't exists, -1 on failure.
+ */
 
-Boolean
-chooseMcastGroup(RunTimeOpts * rtOpts, struct in_addr *netAddr)
+static int
+interfaceExists(char* ifaceName)
 {
 
-	char *addrStr;
+    int ret;
+    struct ifaddrs *ifaddr, *ifa;
 
-#ifdef PTPD_EXPERIMENTAL
-	switch(rtOpts->mcast_group_Number){
-	case 0:
-		addrStr = DEFAULT_PTP_DOMAIN_ADDRESS;
-		break;
+    if(!strlen(ifaceName)) {
+	DBG("interfaceExists called for an empty interface!");
+	return 0;
+    }
 
-	case 1:
-		addrStr = ALTERNATE_PTP_DOMAIN1_ADDRESS;
-		break;
-	case 2:
-		addrStr = ALTERNATE_PTP_DOMAIN2_ADDRESS;
-		break;
-	case 3:
-		addrStr = ALTERNATE_PTP_DOMAIN3_ADDRESS;
-		break;
+    if(getifaddrs(&ifaddr) == -1) {
+	PERROR("Could not get interface list");
+	ret = -1;
+	goto end;
 
-	default:
-		ERROR("Unk group %d\n", rtOpts->mcast_group_Number);
-		exit(3);
-		break;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+
+	if(!strcmp(ifaceName, ifa->ifa_name)) {
+	    ret = 1;
+	    goto end;
 	}
+
+    }
+
+    ret = 0;
+    DBG("Interface not found: %s\n", ifaceName);
+
+end:
+   freeifaddrs(ifaddr);
+    return ret;
+}
+
+static int
+getInterfaceFlags(char* ifaceName, unsigned int* flags)
+{
+
+    int ret;
+    struct ifaddrs *ifaddr, *ifa;
+
+    if(!strlen(ifaceName)) {
+	DBG("interfaceExists called for an empty interface!");
+	return 0;
+    }
+
+    if(getifaddrs(&ifaddr) == -1) {
+	PERROR("Could not get interface list");
+	ret = -1;
+	goto end;
+
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+
+	if(!strcmp(ifaceName, ifa->ifa_name)) {
+	    *flags = ifa->ifa_flags;
+	    ret = 1;
+	    goto end;
+	}
+
+    }
+
+    ret = 0;
+    DBG("Interface not found: %s\n", ifaceName);
+
+end:
+   freeifaddrs(ifaddr);
+    return ret;
+}
+
+
+/* Try getting addr address of family family from interface ifaceName.
+   Return 1 on success, 0 when no suitable address available, -1 on failure.
+ */
+static int
+getInterfaceAddress(char* ifaceName, int family, struct in_addr* addr) {
+
+    int ret;
+    struct ifaddrs *ifaddr, *ifa;
+
+    if(getifaddrs(&ifaddr) == -1) {
+	PERROR("Could not get interface list");
+	ret = -1;
+	goto end;
+
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+
+	if(!strcmp(ifaceName, ifa->ifa_name) && ifa->ifa_addr->sa_family == family) {
+
+		*addr = ((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
+    		ret = 1;
+    		goto end;
+
+	}
+
+    }
+
+    ret = 0;
+    DBG("Interface not found: %s\n", ifaceName);
+
+end:
+
+    freeifaddrs(ifaddr);
+    return ret;
+}
+
+
+/* Try getting hwAddrSize bytes of ifaceName hardware address,
+   and place them in hwAddr. Return 1 on success, 0 when no suitable
+   hw address available, -1 on failure.
+ */
+static int
+getHwAddress (char* ifaceName, unsigned char* hwAddr, int hwAddrSize)
+{
+
+    int ret;
+    if(!strlen(ifaceName))
+	return 0;
+
+/* BSD* - AF_LINK gives us access to the hw address via struct sockaddr_dl */
+#ifdef AF_LINK
+
+    struct ifaddrs *ifaddr, *ifa;
+
+    if(getifaddrs(&ifaddr) == -1) {
+	PERROR("Could not get interface list");
+	ret = -1;
+	goto end;
+
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+
+	if(!strcmp(ifaceName, ifa->ifa_name) && ifa->ifa_addr->sa_family == AF_LINK) {
+
+		struct sockaddr_dl* sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+		if(sdl->sdl_type == IFT_ETHER || sdl->sdl_type == IFT_L2VLAN) {
+
+			memcpy(hwAddr, LLADDR(sdl),
+			hwAddrSize <= sizeof(sdl->sdl_data) ?
+			hwAddrSize : sizeof(sdl->sdl_data));
+			ret = 1;
+			goto end;
+		} else {
+			DBGV("Unsupported hardware address family on %s\n", ifaceName);
+			ret = 0;
+			goto end;
+		}
+	}
+
+    }
+
+    ret = 0;
+    DBG("Interface not found: %s\n", ifaceName);
+
+end:
+
+    freeifaddrs(ifaddr);
+    return ret;
+
+/* Linux, basically */
 #else
-	addrStr = DEFAULT_PTP_DOMAIN_ADDRESS;
-#endif
 
-	if (!inet_aton(addrStr, netAddr)) {
-		ERROR("failed to encode multicast address: %s\n", addrStr);
-		return FALSE;
+    int sockfd;
+    struct ifreq ifr;
+
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if(sockfd < 0) {
+	PERROR("Could not open test socket");
+	return -1;
+    }
+
+    memset(&ifr, 0, sizeof(struct ifreq));
+
+    strncpy(ifr.ifr_name, ifaceName, IFACE_NAME_LENGTH);
+
+    if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) < 0) {
+            DBGV("failed to request hardware address for %s", ifaceName);
+	    ret = -1;
+	    goto end;
+    }
+
+
+    int af = ifr.ifr_hwaddr.sa_family;
+
+    if (    af == ARPHRD_ETHER
+	 || af == ARPHRD_IEEE802
+#ifdef ARPHRD_INFINIBAND
+	 || af == ARPHRD_INFINIBAND
+#endif
+	) {
+	    memcpy(hwAddr, ifr.ifr_hwaddr.sa_data, hwAddrSize);
+	    ret = 1;
+	} else {
+	    DBGV("Unsupported hardware address family on %s\n", ifaceName);
+	    ret = 0;
 	}
-	return TRUE;
+end:
+    close(sockfd);
+    return ret;
+
+#endif /* AF_LINK */
+
 }
 
-
-/*Test if network layer is OK for PTP*/
-UInteger8 
-lookupCommunicationTechnology(UInteger8 communicationTechnology)
+static Boolean getInterfaceInfo(char* ifaceName, InterfaceInfo* ifaceInfo)
 {
-#if defined(linux)
-	switch (communicationTechnology) {
-	case ARPHRD_ETHER:
-	case ARPHRD_EETHER:
-	case ARPHRD_IEEE802:
-		return PTP_ETHER;
-	default:
-		break;
-	}
-#endif  /* defined(linux) */
 
-	return PTP_DEFAULT;
+    int res;
+
+    res = interfaceExists(ifaceName);
+
+    if (res == -1) {
+
+	return FALSE;
+
+    } else if (res == 0) {
+
+	ERROR("Interface %s does not exist.\n", ifaceName);
+	return FALSE;
+    }
+
+    res = getInterfaceAddress(ifaceName, ifaceInfo->addressFamily, &ifaceInfo->afAddress);
+
+    if (res == -1) {
+
+	return FALSE;
+
+    }
+
+    ifaceInfo->hasAfAddress = res;
+
+    res = getHwAddress(ifaceName, (unsigned char*)ifaceInfo->hwAddress, 6);
+
+    if (res == -1) {
+
+	return FALSE;
+
+    }
+
+    ifaceInfo->hasHwAddress = res;
+
+    res = getInterfaceFlags(ifaceName, &ifaceInfo->flags);
+
+    if (res == -1) {
+
+	return FALSE;
+
+    }
+
+    return TRUE;
+
 }
 
 Boolean
-testInterface(char * ifaceName)
+testInterface(char * ifaceName, RunTimeOpts* rtOpts)
 {
-	UInteger8 ct;
-	NetPath np;
-        /* open a test socket */
-	if ((np.eventSock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-		DBG("testInterface: error opening test socket\n");
+
+	InterfaceInfo info;
+
+	info.addressFamily = AF_INET;
+
+	if(getInterfaceInfo(ifaceName, &info) != 1)
 		return FALSE;
-	/* Attempt getting an IP address */
-        } else if (!findIface(ifaceName,
-		&ct,np.port_uuid_field, &np)) {
-				DBG("testInterface: findIface returned FALSE");
-		return FALSE;
-	}
-	close(np.eventSock);
-	return TRUE;
-}
 
- /* Find the local network interface */
-UInteger32
-findIface(Octet * ifaceName, UInteger8 * communicationTechnology,
-    Octet * uuid, NetPath * netPath)
-{
-#if defined(linux)
+	switch(rtOpts->transport) {
 
-	/* depends on linux specific ioctls (see 'netdevice' man page) */
-	int i, flags;
-	struct ifconf data;
-	struct ifreq device[IFCONF_LENGTH];
-
-	data.ifc_len = sizeof(device);
-	data.ifc_req = device;
-
-	memset(data.ifc_buf, 0, data.ifc_len);
-
-	flags = IFF_UP | IFF_RUNNING | IFF_MULTICAST;
-
-	/* look for an interface if none specified */
-	if (ifaceName[0] != '\0') {
-		i = 0;
-		memcpy(device[i].ifr_name, ifaceName, IFACE_NAME_LENGTH);
-
-		if (ioctl(netPath->eventSock, SIOCGIFHWADDR, &device[i]) < 0)
-			DBGV("failed to get hardware address\n");
-		else if ((*communicationTechnology = 
-			  lookupCommunicationTechnology(
-				  device[i].ifr_hwaddr.sa_family)) 
-			 == PTP_DEFAULT)
-			DBGV("unsupported communication technology (%d)\n", 
-			     *communicationTechnology);
-		else
-			memcpy(uuid, device[i].ifr_hwaddr.sa_data, 
-			       PTP_UUID_LENGTH);
-	} else {
-		/* no iface specified */
-		/* get list of network interfaces */
-		if (ioctl(netPath->eventSock, SIOCGIFCONF, &data) < 0) {
-			PERROR("failed query network interfaces");
-			return 0;
+	    case UDP_IPV4:
+		if(!info.hasAfAddress) {
+		    ERROR("Interface %s has no IPv4 address set\n", ifaceName);
+		    return FALSE;
 		}
-		if (data.ifc_len >= sizeof(device))
-			DBG("device list may exceed allocated space\n");
-
-		/* search through interfaces */
-		for (i = 0; i < data.ifc_len / sizeof(device[0]); ++i) {
-			DBGV("%d %s %s\n", i, device[i].ifr_name, 
-			     inet_ntoa(((struct sockaddr_in *)
-					&device[i].ifr_addr)->sin_addr));
-
-			if (ioctl(netPath->eventSock, SIOCGIFFLAGS, 
-				  &device[i]) < 0)
-				DBGV("failed to get device flags\n");
-			else if ((device[i].ifr_flags & flags) != flags)
-				DBGV("does not meet requirements"
-				     "(%08x, %08x)\n", device[i].ifr_flags, 
-				     flags);
-			else if (ioctl(netPath->eventSock, SIOCGIFHWADDR, 
-				       &device[i]) < 0)
-				DBGV("failed to get hardware address\n");
-			else if ((*communicationTechnology = 
-				  lookupCommunicationTechnology(
-					  device[i].ifr_hwaddr.sa_family)) 
-				 == PTP_DEFAULT)
-				DBGV("unsupported communication technology"
-				     "(%d)\n", *communicationTechnology);
-			else {
-				DBGV("found interface (%s)\n", 
-				     device[i].ifr_name);
-				memcpy(uuid, device[i].ifr_hwaddr.sa_data, 
-				       PTP_UUID_LENGTH);
-				memcpy(ifaceName, device[i].ifr_name, 
-				       IFACE_NAME_LENGTH);
-				break;
-			}
-		}
-	}
-
-	if (ifaceName[0] == '\0') {
-		ERROR("failed to find a usable interface\n");
-		return 0;
-	}
-	if (ioctl(netPath->eventSock, SIOCGIFADDR, &device[i]) < 0) {
-		PERROR("failed to get ip address");
-		return 0;
-	}
-
-	if (*communicationTechnology == PTP_DEFAULT) {
-		UInteger32 sourceIPaddr=((struct sockaddr_in *)&device[i].ifr_addr)->sin_addr.s_addr;
-		// replace first 4 bytes of 6 byte uuid with interface ip address to ensure unique uuid
-		// for non ethernet networks
-		memcpy(uuid, &sourceIPaddr, 4);
-		DBG("using ip address instead of mac address for uuid\n");
-	}
-
-	return ((struct sockaddr_in *)&device[i].ifr_addr)->sin_addr.s_addr;
-
-#else /* usually *BSD */
-
-	struct ifaddrs *if_list, *ifv4, *ifh;
-
-	if (getifaddrs(&if_list) < 0) {
-		PERROR("getifaddrs() failed");
-		return FALSE;
-	}
-	/* find an IPv4, multicast, UP interface, right name(if supplied) */
-	for (ifv4 = if_list; ifv4 != NULL; ifv4 = ifv4->ifa_next) {
-		if ((ifv4->ifa_flags & IFF_UP) == 0)
-			continue;
-		if ((ifv4->ifa_flags & IFF_RUNNING) == 0)
-			continue;
-		if ((ifv4->ifa_flags & IFF_LOOPBACK))
-			continue;
-		if ((ifv4->ifa_flags & IFF_MULTICAST) == 0)
-			continue;
-                /* must have IPv4 address */
-		if (ifv4->ifa_addr->sa_family != AF_INET)
-			continue;
-		if (ifaceName[0] && strncmp(ifv4->ifa_name, ifaceName, 
-					    IF_NAMESIZE) != 0)
-			continue;
 		break;
-	}
 
-	if (ifv4 == NULL) {
-		if (ifaceName[0]) {
-			ERROR("interface \"%s\" does not exist,"
-			      "or is not appropriate\n", ifaceName);
-			return FALSE;
+	    case IEEE_802_3:
+		if(!info.hasHwAddress) {
+		    ERROR("Interface %s has no supported hardware address - possibly not an Ethernet interface\n", ifaceName);
+		    return FALSE;
 		}
-		ERROR("no suitable interfaces found!");
+		break;
+
+	    default:
+		ERROR("Unsupported transport: %d\n", rtOpts->transport);
 		return FALSE;
-	}
-	/* find the AF_LINK info associated with the chosen interface */
-	for (ifh = if_list; ifh != NULL; ifh = ifh->ifa_next) {
-		if (ifh->ifa_addr->sa_family != AF_LINK)
-			continue;
-		if (strncmp(ifv4->ifa_name, ifh->ifa_name, IF_NAMESIZE) == 0)
-			break;
+
 	}
 
-	if (ifh == NULL) {
-		ERROR("could not get hardware address for interface \"%s\"\n", 
-		      ifv4->ifa_name);
-		return FALSE;
-	}
-	/* check that the interface TYPE is OK */
-	switch (((struct sockaddr_dl *)ifh->ifa_addr)->sdl_type) {
-		case IFT_ETHER:
-		case IFT_L2VLAN:
-			break;
-		default:
-			ERROR("\"%s\" is not an ethernet interface!\n", ifh->ifa_name);
-			return FALSE;
-	}
-	DBG("==> %s %s %s\n", ifv4->ifa_name,
-	    inet_ntoa(((struct sockaddr_in *)ifv4->ifa_addr)->sin_addr),
-	    ether_ntoa((struct ether_addr *)
-		       LLADDR((struct sockaddr_dl *)ifh->ifa_addr))
-	    );
+    if(!(info.flags & IFF_UP) || !(info.flags & IFF_RUNNING))
+	    WARNING("Interface %s seems to be down. PTPd will not operate correctly until it's up.\n", ifaceName);
 
-	*communicationTechnology = PTP_ETHER;
-	memcpy(ifaceName, ifh->ifa_name, IFACE_NAME_LENGTH);
-	memcpy(uuid, LLADDR((struct sockaddr_dl *)ifh->ifa_addr), 
-	       PTP_UUID_LENGTH);
+    if(info.flags & IFF_LOOPBACK)
+	    WARNING("Interface %s is a loopback interface.\n", ifaceName);
 
-	return ((struct sockaddr_in *)ifv4->ifa_addr)->sin_addr.s_addr;
+    if(!(info.flags & IFF_MULTICAST) 
+	    && rtOpts->transport==UDP_IPV4 
+	    && rtOpts->ip_mode != IPMODE_UNICAST) {
+	    WARNING("Interface %s is not multicast capable.\n", ifaceName);
+    }
 
-#endif
+	return TRUE;
+
 }
 
 /**
@@ -458,26 +534,30 @@ netInitMulticastIPv4(NetPath * netPath, Integer32 multicastAddr)
  * 
  * @return TRUE if successful
  */
-Boolean
+static Boolean
 netInitMulticast(NetPath * netPath,  RunTimeOpts * rtOpts)
 {
 	struct in_addr netAddr;
-	char addrStr[NET_ADDRESS_LENGTH];
+	char addrStr[NET_ADDRESS_LENGTH+1];
+
 	
 	/* Init General multicast IP address */
-	if(!chooseMcastGroup(rtOpts, &netAddr)){
+	strncpy(addrStr, DEFAULT_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
+	if (!inet_aton(addrStr, &netAddr)) {
+		ERROR("failed to encode multicast address: %s\n", addrStr);
 		return FALSE;
 	}
+
 	netPath->multicastAddr = netAddr.s_addr;
 	if(!netInitMulticastIPv4(netPath, netPath->multicastAddr)) {
 		return FALSE;
 	}
+
 	/* End of General multicast Ip address init */
 
 
 	/* Init Peer multicast IP address */
-	memcpy(addrStr, PEER_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
-
+	strncpy(addrStr, PEER_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
 	if (!inet_aton(addrStr, &netAddr)) {
 		ERROR("failed to encode multi-cast address: %s\n", addrStr);
 		return FALSE;
@@ -491,14 +571,34 @@ netInitMulticast(NetPath * netPath,  RunTimeOpts * rtOpts)
 	return TRUE;
 }
 
-Boolean
-netSetMulticastLoopback(NetPath * netPath, Boolean value) {
-	int temp = value ? 1 : 0;
+static Boolean
+netSetMulticastTTL(int sockfd, int ttl) {
 
+#ifdef __OpenBSD__
+	uint8_t temp = (uint8_t) ttl;
+#else
+	int temp = ttl;
+#endif
+
+	if (setsockopt(sockfd, IPPROTO_IP, IP_MULTICAST_TTL,
+		       &temp, sizeof(temp)) < 0) {
+	    PERROR("Failed to set socket multicast time-to-live");
+	    return FALSE;
+	}
+	return TRUE;
+}
+
+static Boolean
+netSetMulticastLoopback(NetPath * netPath, Boolean value) {
+#ifdef __OpenBSD__
+	uint8_t temp = value ? 1 : 0;
+#else
+	int temp = value ? 1 : 0;
+#endif
 	DBG("Going to set multicast loopback with %d \n", temp);
 
 	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
-	       &temp, sizeof(int)) < 0) {
+	       &temp, sizeof(temp)) < 0) {
 		PERROR("Failed to set multicast loopback");
 		return FALSE;
 	}
@@ -558,7 +658,7 @@ end:
  * 
  * @return TRUE if successful
  */
-Boolean 
+static Boolean 
 netInitTimestamping(NetPath * netPath, RunTimeOpts * rtOpts)
 {
 
@@ -590,10 +690,10 @@ netInitTimestamping(NetPath * netPath, RunTimeOpts * rtOpts)
 			    rtOpts->ifaceName);
 		val = 1;
 		netPath->txTimestampFailure = FALSE;
-	} else if(!(tsInfo.so_timestamping & val)) {
+	} else if((tsInfo.so_timestamping & val) != val) {
 		DBGV("Required SO_TIMESTAMPING flags not supported - reverting to SO_TIMESTAMPNS\n");
 		val = 1;
-		netPath->txTimestampFailure = FALSE;
+		netPath->txTimestampFailure = TRUE;
 	}
 #else
 	netPath->txTimestampFailure = FALSE;
@@ -677,10 +777,7 @@ return FALSE;
 
 
 /**
- * start all of the UDP stuff 
- * must specify 'subdomainName', and optionally 'ifaceName', 
- * if not then pass ifaceName == "" 
- * on socket options, see the 'socket(7)' and 'ip' man pages 
+ * Init all network transports
  *
  * @param netPath 
  * @param rtOpts 
@@ -692,31 +789,37 @@ Boolean
 netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 {
 	int temp;
-	struct in_addr interfaceAddr;
 	struct sockaddr_in addr;
+
+#ifdef PTPD_PCAP
 	struct bpf_program program;
 	char errbuf[PCAP_ERRBUF_SIZE];
-	pid_t job = htonl(getpid());
-       
+#endif
+
 	DBG("netInit\n");
 
+#ifdef PTPD_PCAP
 	netPath->pcapEvent = NULL;
 	netPath->pcapGeneral = NULL;
 	netPath->pcapEventSock = -1;
 	netPath->pcapGeneralSock = -1;
+#endif
+	netPath->generalSock = -1;
+	netPath->eventSock = -1;
 
+#ifdef PTPD_PCAP
 	if (rtOpts->transport == IEEE_802_3) {
 		netPath->headerOffset = PACKET_BEGIN_ETHER;
+#ifdef HAVE_STRUCT_ETHER_ADDR_OCTET
 		memcpy(netPath->etherDest.octet, ether_aton(PTP_ETHER_DST), ETHER_ADDR_LEN);
 		memcpy(netPath->peerEtherDest.octet, ether_aton(PTP_ETHER_PEER), ETHER_ADDR_LEN);
+#else
+		memcpy(netPath->etherDest.ether_addr_octet, ether_aton(PTP_ETHER_DST), ETHER_ADDR_LEN);
+		memcpy(netPath->peerEtherDest.ether_addr_octet, ether_aton(PTP_ETHER_PEER), ETHER_ADDR_LEN);
+#endif /* HAVE_STRUCT_ETHER_ADDR_OCTET */
 	} else
+#endif
 		netPath->headerOffset = PACKET_BEGIN_UDP;
-
-	if (rtOpts->jobid) {
-		memset(netPath->port_uuid_field, 0, PTP_UUID_LENGTH);
-		memcpy(netPath->port_uuid_field + (PTP_UUID_LENGTH - sizeof(job)),
-		    (pid_t *)&job, sizeof(job));
-	}
 
 	/* open sockets */
 	if ((netPath->eventSock = socket(PF_INET, SOCK_DGRAM, 
@@ -727,15 +830,31 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		return FALSE;
 	}
 
-	/* find a network interface */
-	if (!(interfaceAddr.s_addr = 
-	      findIface(rtOpts->ifaceName, 
-			&ptpClock->port_communication_technology,
-			netPath->port_uuid_field, netPath)))
+	if(!testInterface(rtOpts->ifaceName, rtOpts))
 		return FALSE;
 
-	DBG("Listening on IP: %s\n",inet_ntoa(interfaceAddr));
+	netPath->interfaceInfo.addressFamily = AF_INET;
 
+	/* the if is here only to get rid of an unused result warning. */
+	if( getInterfaceInfo(rtOpts->ifaceName, &netPath->interfaceInfo)!= 1)
+		return FALSE;
+
+	/* No HW address, we'll use the protocol address to form interfaceID -> clockID */
+	if( !netPath->interfaceInfo.hasHwAddress && netPath->interfaceInfo.hasAfAddress ) {
+		uint32_t addr = netPath->interfaceInfo.afAddress.s_addr;
+		memcpy(netPath->interfaceID, &addr, 2);
+		memcpy(netPath->interfaceID + 4, &addr + 2, 2);
+	/* Initialise interfaceID with hardware address */
+	} else {
+		    memcpy(&netPath->interfaceID, &netPath->interfaceInfo.hwAddress, 
+			    sizeof(netPath->interfaceID) <= sizeof(netPath->interfaceInfo.hwAddress) ?
+				    sizeof(netPath->interfaceID) : sizeof(netPath->interfaceInfo.hwAddress)
+			    );
+	}
+
+	DBG("Listening on IP: %s\n",inet_ntoa(netPath->interfaceInfo.afAddress));
+
+#ifdef PTPD_PCAP
 	if (rtOpts->pcap == TRUE) {
 		int promisc = (rtOpts->transport == IEEE_802_3 ) ? 1 : 0;
 		if ((netPath->pcapEvent = pcap_open_live(rtOpts->ifaceName,
@@ -795,7 +914,9 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 			}
 		}
 	}
-	
+#endif
+
+#ifdef PTPD_PCAP
 	if(rtOpts->transport == IEEE_802_3) {
 		close(netPath->eventSock);
 		netPath->eventSock = -1;
@@ -806,11 +927,11 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		netPath->txTimestampFailure = TRUE;
 #endif /* SO_TIMESTAMPING */
 	} else {
-		
+#endif
 		/* save interface address for IGMP refresh */
-		netPath->interfaceAddr = interfaceAddr;
-		
-		DBG("Local IP address used : %s \n", inet_ntoa(interfaceAddr));
+		netPath->interfaceAddr = netPath->interfaceInfo.afAddress;
+
+		DBG("Local IP address used : %s \n", inet_ntoa(netPath->interfaceInfo.afAddress));
 
 		temp = 1;			/* allow address reuse */
 		if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_REUSEADDR, 
@@ -824,7 +945,9 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		 * need INADDR_ANY to allow receipt of multi-cast and uni-cast
 		 * messages
 		 */
-		if (rtOpts->jobid) {
+
+		/* why??? */
+		if (rtOpts->pidAsClockId) {
 			if (inet_pton(AF_INET, DEFAULT_PTP_DOMAIN_ADDRESS, &addr.sin_addr) < 0) {
 				PERROR("failed to convert address");
 				return FALSE;
@@ -896,20 +1019,14 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 				return FALSE;
 
 			/* set socket time-to-live  */
-			if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL,
-				       &rtOpts->ttl, sizeof(int)) < 0
-			    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL,
-					  &rtOpts->ttl, sizeof(int)) < 0) {
-				PERROR("Failed to set socket multicast time-to-live");
+			if(!netSetMulticastTTL(netPath->eventSock,rtOpts->ttl) ||
+			    !netSetMulticastTTL(netPath->generalSock,rtOpts->ttl))
 				return FALSE;
-			}
 
 			/* start tracking TTL */
 			netPath->ttlEvent = rtOpts->ttl;
 			netPath->ttlGeneral = rtOpts->ttl;
-
 		}
-
 
 #ifdef SO_TIMESTAMPING
 			/* Reset the failure indicator when (re)starting network */
@@ -937,17 +1054,18 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 				return FALSE;
 			}
 
-
+#ifdef PTPD_PCAP
 	}
+#endif
 
 	/* Compile ACLs */
 	if(rtOpts->timingAclEnabled) {
-    		freeIpv4AccessList(netPath->timingAcl);
+    		freeIpv4AccessList(&netPath->timingAcl);
 		netPath->timingAcl=createIpv4AccessList(rtOpts->timingAclPermitText,
 			rtOpts->timingAclDenyText, rtOpts->timingAclOrder);
 	}
 	if(rtOpts->managementAclEnabled) {
-		freeIpv4AccessList(netPath->managementAcl);
+		freeIpv4AccessList(&netPath->managementAcl);
 		netPath->managementAcl=createIpv4AccessList(rtOpts->managementAclPermitText,
 			rtOpts->managementAclDenyText, rtOpts->managementAclOrder);
 	}
@@ -955,7 +1073,7 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 	return TRUE;
 }
 
-/*Check if data have been received*/
+/*Check if data has been received*/
 int 
 netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 {
@@ -983,6 +1101,7 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 
 	FD_ZERO(readfds);
 	nfds = 0;
+#ifdef PTPD_PCAP
 	if (netPath->pcapEventSock >= 0) {
 		FD_SET(netPath->pcapEventSock, readfds);
 		if (netPath->pcapGeneralSock >= 0)
@@ -993,6 +1112,7 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 			nfds = netPath->pcapGeneralSock;
 
 	} else if (netPath->eventSock >= 0) {
+#endif
 		FD_SET(netPath->eventSock, readfds);
 		if (netPath->generalSock >= 0)
 			FD_SET(netPath->generalSock, readfds);
@@ -1000,8 +1120,9 @@ netSelect(TimeInternal * timeout, NetPath * netPath, fd_set *readfds)
 		nfds = netPath->eventSock;
 		if (netPath->eventSock < netPath->generalSock)
 			nfds = netPath->generalSock;
-
+#ifdef PTPD_PCAP
 	}
+#endif
 	nfds++;
 
 #if defined PTPD_SNMP
@@ -1063,8 +1184,10 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath, int flags)
 	struct iovec vec[1];
 	struct sockaddr_in from_addr;
 
+#ifdef PTPD_PCAP
 	struct pcap_pkthdr *pkt_header;
 	const u_char *pkt_data;
+#endif
 
 	union {
 		struct cmsghdr cm;
@@ -1085,7 +1208,9 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath, int flags)
 #endif
 	Boolean timestampValid = FALSE;
 
+#ifdef PTPD_PCAP
 	if (netPath->pcapEvent == NULL) { /* Using sockets */
+#endif
 		vec[0].iov_base = buf;
 		vec[0].iov_len = PACKET_SIZE;
 
@@ -1197,7 +1322,12 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath, int flags)
 			DBG("netRecvEvent: no receive time stamp\n");
 			return 0;
 		}
-	} else { /* Using PCAP */
+#ifdef PTPD_PCAP
+	}
+#endif
+
+#ifdef PTPD_PCAP
+	else { /* Using PCAP */
 		/* Discard packet on socket */
 		if (netPath->eventSock >= 0) {
 			recv(netPath->eventSock, buf, PACKET_SIZE, MSG_DONTWAIT);
@@ -1230,6 +1360,7 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath, int flags)
 		fflush(NULL);
 		ret = pkt_header->caplen - netPath->headerOffset;
 	}
+#endif
 	return ret;
 }
 
@@ -1250,17 +1381,27 @@ netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath, int flags)
 ssize_t 
 netRecvGeneral(Octet * buf, NetPath * netPath)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
 	struct sockaddr_in from_addr;
+
+#ifdef PTPD_PCAP
 	struct pcap_pkthdr *pkt_header;
 	const u_char *pkt_data;
+#endif
 	socklen_t from_addr_len = sizeof(from_addr);
 
+#ifdef PTPD_PCAP
 	if (netPath->pcapGeneral == NULL) {
-		ret=recvfrom(netPath->generalSock, buf, PACKET_SIZE, MSG_DONTWAIT, &from_addr, &from_addr_len);
+#endif
+		ret=recvfrom(netPath->generalSock, buf, PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr*)&from_addr, &from_addr_len);
 		netPath->lastRecvAddr = from_addr.sin_addr.s_addr;
 		return ret;
-	} else { /* Using PCAP */
+#ifdef PTPD_PCAP
+	}
+#endif
+
+#ifdef PTPD_PCAP
+	else { /* Using PCAP */
 		/* Discard packet on socket */
 		if (netPath->generalSock >= 0)
 			recv(netPath->generalSock, buf, PACKET_SIZE, MSG_DONTWAIT);
@@ -1287,24 +1428,30 @@ netRecvGeneral(Octet * buf, NetPath * netPath)
 		fflush(NULL);
 		ret = pkt_header->caplen - netPath->headerOffset;
 	}
-
+#endif
 	return ret;
 }
 
 
+#ifdef PTPD_PCAP
 ssize_t
 netSendPcapEther(Octet * buf,  UInteger16 length,
 			struct ether_addr * dst, struct ether_addr * src,
 			pcap_t * pcap) {
 	Octet ether[ETHER_HDR_LEN + PACKET_SIZE];
+#ifdef HAVE_STRUCT_ETHER_ADDR_OCTET
 	memcpy(ether, dst->octet, ETHER_ADDR_LEN);
 	memcpy(ether + ETHER_ADDR_LEN, src->octet, ETHER_ADDR_LEN);
+#else
+	memcpy(ether, dst->ether_addr_octet, ETHER_ADDR_LEN);
+	memcpy(ether + ETHER_ADDR_LEN, src->ether_addr_octet, ETHER_ADDR_LEN);
+#endif /* HAVE_STRUCT_ETHER_ADDR_OCTET */
 	*((short *)&ether[2 * ETHER_ADDR_LEN]) = htons(PTP_ETHER_TYPE);
 	memcpy(ether + ETHER_HDR_LEN, buf, length);
 
 	return pcap_inject(pcap, ether, ETHER_HDR_LEN + length);
 }
-
+#endif
 
 //
 // alt_dst: alternative destination.
@@ -1324,28 +1471,34 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_EVENT_PORT);
 
+#ifdef PTPD_PCAP
 	/* In PCAP Ethernet mode, we use pcapEvent for receiving all messages 
 	 * and pcapGeneral for sending all messages
 	 */
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3 )) {
-
 		ret = netSendPcapEther(buf, length,
 			&netPath->etherDest,
-			(struct ether_addr *)netPath->port_uuid_field,
+			(struct ether_addr *)netPath->interfaceID,
 			netPath->pcapGeneral);
 		
 		if (ret <= 0) 
 			DBG("Error sending ether multicast event message\n");
 		else
 			netPath->sentPackets++;
-
-	} else {
+        } else {
+#endif
 		if (netPath->unicastAddr || alt_dst ) {
 			if (netPath->unicastAddr) {
 				addr.sin_addr.s_addr = netPath->unicastAddr;
 			} else {
 				addr.sin_addr.s_addr = alt_dst;
 			}
+
+			/*
+			 * This function is used for PTP only anyway...
+			 * If we're sending to a unicast address, set the UNICAST flag.
+			 */
+			*(char *)(buf + 6) |= PTP_UNICAST;
 
 			ret = sendto(netPath->eventSock, buf, length, 0, 
 				     (struct sockaddr *)&addr, 
@@ -1392,8 +1545,8 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
                         /* Is TTL OK? */
 			if(netPath->ttlEvent != rtOpts->ttl) {
 				/* Try restoring TTL */
-				if(setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL,
-					&rtOpts->ttl, sizeof(int)) >= 0) {
+			/* set socket time-to-live  */
+			if (netSetMulticastTTL(netPath->eventSock,rtOpts->ttl)) {
 				    netPath->ttlEvent = rtOpts->ttl;
 				}
             		}
@@ -1419,7 +1572,10 @@ netSendEvent(Octet * buf, UInteger16 length, NetPath * netPath,
 			}
 #endif /* SO_TIMESTAMPING */
 		}
+
+#ifdef PTPD_PCAP
 	}
+#endif
 	return ret;
 }
 
@@ -1433,18 +1589,19 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_GENERAL_PORT);
 
+#ifdef PTPD_PCAP
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
 			&netPath->etherDest,
-			(struct ether_addr *)netPath->port_uuid_field,
+			(struct ether_addr *)netPath->interfaceID,
 			netPath->pcapGeneral);
 
 		if (ret <= 0) 
 			DBG("Error sending ether multicast general message\n");
 		else
 			netPath->sentPackets++;
-
 	} else {
+#endif
 		if(netPath->unicastAddr || alt_dst ){
 			if (netPath->unicastAddr) {
 				addr.sin_addr.s_addr = netPath->unicastAddr;
@@ -1452,6 +1609,11 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 				addr.sin_addr.s_addr = alt_dst;
 			}
 
+			/*
+			 * This function is used for PTP only anyway...
+			 * If we're sending to a unicast address, set the UNICAST flag.
+			 */
+			*(char *)(buf + 6) |= PTP_UNICAST;
 
 			ret = sendto(netPath->generalSock, buf, length, 0, 
 				     (struct sockaddr *)&addr, 
@@ -1466,11 +1628,8 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
                         /* Is TTL OK? */
 			if(netPath->ttlGeneral != rtOpts->ttl) {
 				/* Try restoring TTL */
-				if(setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL,
-					&rtOpts->ttl, sizeof(int)) >= 0) {
-
+				if (netSetMulticastTTL(netPath->generalSock,rtOpts->ttl)) {
 				    netPath->ttlGeneral = rtOpts->ttl;
-
 				}
             		}
 
@@ -1482,7 +1641,10 @@ netSendGeneral(Octet * buf, UInteger16 length, NetPath * netPath,
 			else
 				netPath->sentPackets++;
 		}
+
+#ifdef PTPD_PCAP
 	}
+#endif
 	return ret;
 }
 
@@ -1496,15 +1658,20 @@ netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpt
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_GENERAL_PORT);
 
+#ifdef PTPD_PCAP
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
 			&netPath->peerEtherDest,
-			(struct ether_addr *)netPath->port_uuid_field,
+			(struct ether_addr *)netPath->interfaceID,
 			netPath->pcapGeneral);
 
 		if (ret <= 0) 
 			DBG("error sending ether multi-cast general message\n");
-	} else if (netPath->unicastAddr) {
+	} else if (netPath->unicastAddr)
+#else
+	if (netPath->unicastAddr)
+#endif
+	{
 		addr.sin_addr.s_addr = netPath->unicastAddr;
 
 		ret = sendto(netPath->generalSock, buf, length, 0, 
@@ -1518,13 +1685,9 @@ netSendPeerGeneral(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpt
 		
 		/* is TTL already 1 ? */
 		if(netPath->ttlGeneral != 1) {
-			int ttl = 1;
 			/* Try setting TTL to 1 */
-			if(setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL,
-				&ttl, sizeof(int)) >= 0) {
-				
+			if (netSetMulticastTTL(netPath->generalSock,1)) {
 				netPath->ttlGeneral = 1;
-
 			}
                 }
 		ret = sendto(netPath->generalSock, buf, length, 0, 
@@ -1550,15 +1713,20 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts 
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PTP_EVENT_PORT);
 
+#ifdef PTPD_PCAP
 	if ((netPath->pcapGeneral != NULL) && (rtOpts->transport == IEEE_802_3)) {
 		ret = netSendPcapEther(buf, length,
 			&netPath->peerEtherDest,
-			(struct ether_addr *)netPath->port_uuid_field,
+			(struct ether_addr *)netPath->interfaceID,
 			netPath->pcapGeneral);
 
 		if (ret <= 0) 
 			DBG("error sending ether multi-cast general message\n");
-	} else if (netPath->unicastAddr) {
+	} else if (netPath->unicastAddr)
+#else
+	if (netPath->unicastAddr)
+#endif
+	{
 		addr.sin_addr.s_addr = netPath->unicastAddr;
 
 		ret = sendto(netPath->eventSock, buf, length, 0, 
@@ -1607,13 +1775,9 @@ netSendPeerEvent(Octet * buf, UInteger16 length, NetPath * netPath, RunTimeOpts 
 
 		/* is TTL already 1 ? */
 		if(netPath->ttlEvent != 1) {
-			int ttl = 1;
 			/* Try setting TTL to 1 */
-			if(setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL,
-				&ttl, sizeof(int)) >= 0) {
-
+			if (netSetMulticastTTL(netPath->eventSock,1)) {
 			    netPath->ttlEvent = 1;
-
 			}
                 }
 		ret = sendto(netPath->eventSock, buf, length, 0, 

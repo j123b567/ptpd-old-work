@@ -74,10 +74,16 @@ void initData(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		else if (i==4) ptpClock->clockIdentity[i]=0xFE;
 		else
 		{
-		  ptpClock->clockIdentity[i]=ptpClock->netPath.port_uuid_field[j];
+		  ptpClock->clockIdentity[i]=ptpClock->netPath.interfaceID[j];
 		  j++;
 		}
 	}
+
+	if(rtOpts->pidAsClockId) {
+	    uint16_t pid = htons(getpid());
+	    memcpy(ptpClock->clockIdentity + 3, &pid, 2);
+	}
+
 	ptpClock->numberPorts = NUMBER_PORTS;
 
 	ptpClock->clockQuality.clockAccuracy = 
@@ -122,8 +128,8 @@ void initData(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 	 *  Initialize random number generator using same method as ptpv1:
 	 *  seed is now initialized from the last bytes of our mac addres (collected in net.c:findIface())
 	 */
-	srand((ptpClock->netPath.port_uuid_field[PTP_UUID_LENGTH - 1] << 8) +
-	    ptpClock->netPath.port_uuid_field[PTP_UUID_LENGTH - 2]);
+	srand((ptpClock->netPath.interfaceID[PTP_UUID_LENGTH - 1] << 8) +
+	    ptpClock->netPath.interfaceID[PTP_UUID_LENGTH - 2]);
 
 	/*Init other stuff*/
 	ptpClock->number_foreign_records = 0;
@@ -274,9 +280,9 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, const RunTim
 			ptpClock->leapSecondPending = FALSE;
 			ptpClock->leapSecondInProgress = FALSE;
 			timerStop(LEAP_SECOND_PAUSE_TIMER, ptpClock->itimer);
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 			unsetTimexFlags(STA_INS | STA_DEL,TRUE);
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 		}
 
 		/*
@@ -288,7 +294,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, const RunTim
 		    !ptpClock->leapSecondInProgress ) ||
 		    ((!previousLeap59 && ptpClock->timePropertiesDS.leap59) ||
 		    (!previousLeap61 && ptpClock->timePropertiesDS.leap61)))) {
-#if !defined(__APPLE__)
+#ifdef HAVE_SYS_TIMEX_H
 			WARNING("Leap second pending! Setting kernel to %s "
 				"one second at midnight\n",
 				ptpClock->timePropertiesDS.leap61 ? "add" : "delete");
@@ -302,7 +308,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, const RunTim
 			WARNING("Leap second pending! No kernel leap second "
 				"API support - expect a clock jump at "
 				"midnight!\n");
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 			/* only set the flag, the rest happens in doState() */
 			ptpClock->leapSecondPending = TRUE;
 		}

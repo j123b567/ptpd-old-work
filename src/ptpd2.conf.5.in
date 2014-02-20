@@ -127,10 +127,10 @@ uses unicast for all transmission. When unicast mode is selected, destination IP
 .RS 8
 .TP 8
 \fBoptions\fR
-\fIipv4 ethernet \fR
+\fIipv4 ethernet\fR
 .TP 8
 \fBusage\fR
-Transport type for PTP packets.
+Transport type for PTP packets. \fBNOTE:\fR Ethernet transport requires building with \fIlibpcap\fR.
 .TP 8
 \fBdefault\fR
 \fIipv4\fR
@@ -144,6 +144,7 @@ Transport type for PTP packets.
 .TP 8
 \fBusage\fR
 Use libpcap for sending and receiving traffic (automatically enabled in Ethernet mode).
+Requires building with libpcap - builds made with --disable-pcap cannot use this feature.
 .TP 8
 \fBdefault\fR
 \fIN\fR
@@ -859,11 +860,11 @@ Do not exit panic mode until offset drops below this value (nanoseconds).
 .RE
 .RS 0
 .TP 8
-\fBptpengine:pid_as_clock_idendity [\fIBOOLEAN\fB]\fR
+\fBptpengine:pid_as_clock_identity [\fIBOOLEAN\fB]\fR
 .RS 8
 .TP 8
 \fBusage\fR
-Use JobID (PID) for UUID.
+Use PTPd's process ID as the middle part of the PTP clock ID - useful for running multiple instances.
 .TP 8
 \fBdefault\fR
 \fIN\fR
@@ -934,8 +935,7 @@ When entering panic mode, fail over to NTP (after the NTP failover timeout
 .RS 8
 .TP 8
 \fBusage\fR
-When compiled with --enable-sigusr2=counters, clear counters after dumping
-all counter values.
+Clear counters after dumping all counter values on SIGUSR2.
 .TP 8
 \fBdefault\fR
 \fIN\fR
@@ -948,10 +948,12 @@ all counter values.
 .RS 8
 .TP 8
 \fBusage\fR
-Permit access control list for timing packets. Format is a series of 
-comma-separated network prefixes in full CIDR notation a.b.c.d/x where
-a.b.c.d is the subnet and x is the mask. For single IP addresses, a /32
-mask is required for the ACL to be parsed correctly. The match is performed
+Permit access control list for timing and signaling messages. Format is a series of 
+network prefixes and/or IP addresses separated by commas, spaces, tabs or semicolons. 
+Accepted format is CIDR notation (a.b.c.d/mm), single IP address (a.b.c.d),
+or full network/mask (a.b.c.d/m.m.m.m). Shortcuts can be used: 172.16/12
+is expanded to 172.16.0.0/12; 192.168/255.255 is expanded to 
+192.168.0.0/255.255.0.0, etc. The match is performed
 on the source IP address of the incoming messages. IP access lists are
 only supported when using the IP transport.
 .TP 8
@@ -966,10 +968,12 @@ only supported when using the IP transport.
 .RS 8
 .TP 8
 \fBusage\fR
-Deny access control list for timing packets. Format is a series of 
-comma-separated network prefixes in full CIDR notation a.b.c.d/x where
-a.b.c.d is the subnet and x is the mask. For single IP addresses, a /32
-mask is required for the ACL to be parsed correctly. The match is performed
+Deny access control list for timing and signaling messages. Format is a series of 
+network prefixes and/or IP addresses separated by commas, spaces, tabs or semicolons. 
+Accepted format is CIDR notation (a.b.c.d/mm), single IP address (a.b.c.d),
+or full network/mask (a.b.c.d/m.m.m.m). Shortcuts can be used: 172.16/12
+is expanded to 172.16.0.0/12; 192.168/255.255 is expanded to 
+192.168.0.0/255.255.0.0, etc. The match is performed
 on the source IP address of the incoming messages. IP access lists are
 only supported when using the IP transport.
 .TP 8
@@ -985,9 +989,11 @@ only supported when using the IP transport.
 .TP 8
 \fBusage\fR
 Permit access control list for management messages. Format is a series of 
-comma-separated network prefixes in full CIDR notation a.b.c.d/x where
-a.b.c.d is the subnet and x is the mask. For single IP addresses, a /32
-mask is required for the ACL to be parsed correctly. The match is performed
+network prefixes and/or IP addresses separated by commas, spaces, tabs or semicolons. 
+Accepted format is CIDR notation (a.b.c.d/mm), single IP address (a.b.c.d),
+or full network/mask (a.b.c.d/m.m.m.m). Shortcuts can be used: 172.16/12
+is expanded to 172.16.0.0/12; 192.168/255.255 is expanded to 
+192.168.0.0/255.255.0.0, etc. The match is performed
 on the source IP address of the incoming messages. IP access lists are
 only supported when using the IP transport.
 .TP 8
@@ -1003,9 +1009,11 @@ only supported when using the IP transport.
 .TP 8
 \fBusage\fR
 Deny access control list for management messages. Format is a series of 
-comma-separated network prefixes in full CIDR notation a.b.c.d/x where
-a.b.c.d is the subnet and x is the mask. For single IP addresses, a /32
-mask is required for the ACL to be parsed correctly. The match is performed
+network prefixes and/or IP addresses separated by commas, spaces, tabs or semicolons. 
+Accepted format is CIDR notation (a.b.c.d/mm), single IP address (a.b.c.d),
+or full network/mask (a.b.c.d/m.m.m.m). Shortcuts can be used: 172.16/12
+is expanded to 172.16.0.0/12; 192.168/255.255 is expanded to 
+192.168.0.0/255.255.0.0, etc. The match is performed
 on the source IP address of the incoming messages. IP access lists are
 only supported when using the IP transport.
 .TP 8
@@ -1024,7 +1032,8 @@ only supported when using the IP transport.
 .TP 8
 \fBusage\fR
 Order in which permit and deny access lists are evaluated for timing
-packets, the evaluation process is the same as for Apache httpd.
+and signaling messages, the evaluation process is the same as for Apache httpd. \fBSee:
+\fIhttp://httpd.apache.org/docs/current/mod/mod_access_compat.html#order\fR
 .TP 8
 \fBdefault\fR
 \fIdeny-permit\fR
@@ -1041,7 +1050,8 @@ packets, the evaluation process is the same as for Apache httpd.
 .TP 8
 \fBusage\fR
 Order in which permit and deny access lists are evaluated for management
-messages, the evaluation process is the same as for Apache httpd.
+messages, the evaluation process is the same as for Apache httpd. \fBSee:
+\fIhttp://httpd.apache.org/docs/current/mod/mod_access_compat.html#order\fR
 .TP 8
 \fBdefault\fR
 \fIdeny-permit\fR

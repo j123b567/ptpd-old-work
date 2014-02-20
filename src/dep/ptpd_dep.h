@@ -14,17 +14,6 @@
 #define PTPD_DBGV
 #endif
 
-#ifdef DBG_SIGUSR2_CHANGE_DOMAIN
-#ifdef DBG_SIGUSR2_CHANGE_DEBUG
-
-#error "Cannot compile with both DBG_SIGUSR2_CHANGE_DOMAIN and DBG_SIGUSR2_CHANGE_DEBUG"
-
-#endif
-#endif
-
-
-
-
  /** \name System messages*/
  /**\{*/
 
@@ -291,9 +280,8 @@ UInteger16 msgPackManagementResponse(Octet * buf,MsgHeader*,MsgManagement*,PtpCl
  * -Init network stuff, send and receive datas*/
  /**\{*/
 
-Boolean testInterface(char* ifaceName);
+Boolean testInterface(char* ifaceName, RunTimeOpts* rtOpts);
 Boolean netInit(NetPath*,RunTimeOpts*,PtpClock*);
-UInteger32 findIface(Octet * ifaceName, UInteger8 * communicationTechnology, Octet * uuid, NetPath * netPath);
 Boolean netShutdown(NetPath*);
 int netSelect(TimeInternal*,NetPath*,fd_set*);
 ssize_t netRecvEvent(Octet*,TimeInternal*,NetPath*,int);
@@ -383,12 +371,9 @@ Boolean checkOtherLocks(RunTimeOpts *rtOpts);
 
 void recordSync(RunTimeOpts * rtOpts, UInteger16 sequenceId, TimeInternal * time);
 
-#if defined(__APPLE__)
+#ifndef HAVE_SYS_TIMEX_H
 void adjTime(Integer32);
-#endif /* __APPLE__ */
-
-#if !defined(__APPLE__)
-
+#else
 
 void adjFreq_wrapper(RunTimeOpts * rtOpts, PtpClock * ptpClock, double adj);
 Boolean adjFreq(double);
@@ -409,7 +394,7 @@ Boolean checkTimexFlags(int flags);
 void setKernelUtcOffset(int utc_offset);
 #endif /* MOD_TAI */
 
-#endif /* apple */
+#endif /* HAVE_SYS_TIMEX_H */
 
 /** \}*/
 

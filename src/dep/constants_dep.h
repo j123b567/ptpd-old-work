@@ -16,14 +16,16 @@
 /* platform dependent */
 
 #if !defined(linux) && !defined(__NetBSD__) && !defined(__FreeBSD__) && \
-  !defined(__APPLE__)
-#error Not ported to this architecture, please update.
+  !defined(__APPLE__) && !defined(__OpenBSD__)
+#error PTPD hasn't been ported to this OS - should be possible \
+if it's POSIX compatible, if you succeed, report it to ptpd-devel@sourceforge.net
 #endif
 
 #ifdef	linux
 #include<netinet/in.h>
 #include<net/if.h>
 #include<net/if_arp.h>
+#include <ifaddrs.h>
 #define IFACE_NAME_LENGTH         IF_NAMESIZE
 #define NET_ADDRESS_LENGTH        INET_ADDRSTRLEN
 
@@ -39,20 +41,24 @@
 #endif /* linux */
 
 
-#if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
+
+#if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__)
 # include <sys/types.h>
 # include <sys/socket.h>
 # include <netinet/in.h>
 # include <net/if.h>
 # include <net/if_dl.h>
 # include <net/if_types.h>
-# if defined(__FreeBSD__) || defined(__APPLE__)
-#  include <net/ethernet.h>
-#  include <sys/uio.h>
-# else
+#ifdef HAVE_NET_IF_ETHER_H
 #  include <net/if_ether.h>
-# endif
-# include <ifaddrs.h>
+#endif
+#ifdef HAVE_SYS_UIO_H
+#  include <sys/uio.h>
+#endif
+#ifdef HAVE_NET_ETHERNET_H
+#  include <net/ethernet.h>
+#endif
+#  include <ifaddrs.h>
 # define IFACE_NAME_LENGTH         IF_NAMESIZE
 # define NET_ADDRESS_LENGTH        INET_ADDRSTRLEN
 
@@ -92,11 +98,6 @@
 
 #define DEFAULT_PTP_DOMAIN_ADDRESS     "224.0.1.129"
 #define PEER_PTP_DOMAIN_ADDRESS        "224.0.0.107"
-
-/* used for -I option */
-#define ALTERNATE_PTP_DOMAIN1_ADDRESS  "224.0.1.130"
-#define ALTERNATE_PTP_DOMAIN2_ADDRESS  "224.0.1.131"
-#define ALTERNATE_PTP_DOMAIN3_ADDRESS  "224.0.1.132"
 
 /* 802.3 Support */
 
@@ -156,13 +157,10 @@ enum {
 /* default size for string buffers */
 #define BUF_SIZE  1000
 
-
 #define NANOSECONDS_MAX 999999999
-
 
 // limit operator messages to once every X seconds
 #define OPERATOR_MESSAGES_INTERVAL 300.0
-
 
 #define MAXTIMESTR 32
 

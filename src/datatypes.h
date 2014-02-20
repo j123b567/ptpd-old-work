@@ -799,9 +799,6 @@ typedef struct {
 	UInteger8 priority2;
 	UInteger8 domainNumber;
 //	UInteger8 timeSource;
-#ifdef PTPD_EXPERIMENTAL
-	UInteger8 mcast_group_Number;
-#endif
 
 	/*
 	 * For slave state, grace period of n * announceReceiptTimeout
@@ -820,9 +817,8 @@ typedef struct {
 	Boolean setRtc;
 #endif /* linux */
 
-#ifdef DBG_SIGUSR2_DUMP_COUNTERS
+
 	Boolean clearCounters;
-#endif
 
 	Integer8 masterRefreshInterval;
 
@@ -891,7 +887,7 @@ typedef struct {
 #ifdef RUNTIME_DEBUG
 	int debug_level;
 #endif
-	Boolean jobid; /* use jobid aka PID for UUID */
+	Boolean pidAsClockId;
 
 	/**
 	 * This field holds the flags denoting which subsystems
