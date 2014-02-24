@@ -1,7 +1,7 @@
 /**
  * @file    cckcontainer.c
  * @authors Jan Breuer
- * @date   Mon Feb 24 09:20:21 CET 2014
+ * @date   Mon Feb 24 09:20:00 CET 2014
  * 
  * libcck base container
  */
@@ -12,7 +12,8 @@
 #include "cckcontainer.h"
 
 
-void cckContainerInit(CCKContainer * container) {
+void cckContainerInit(CCKContainer * container, const char * type, const char * name) {
+	cckObjectInit(CCK_OBJECT(container), type, name);
 	container->firstChild = NULL;
 }
 

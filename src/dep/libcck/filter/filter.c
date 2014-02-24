@@ -15,16 +15,16 @@
 #include "moving_average.h"
 
 	/* X(name, constructor) */
-#define FILTER_LIST							\
-	X("mav", MovingAverageCreate)			\
-	X("exps", ExponencialSmoothCreate)		\
+#define FILTER_LIST											\
+	X(FILTER_MOVING_AVERAGE, MovingAverageCreate) 			\
+	X(FILTER_EXPONENTIAL_SMOOTH, ExponencialSmoothCreate)	\
 
 
-Filter * FilterCreate(const char * type)
+Filter * FilterCreate(const char * type, const char * name)
 {
-#define X(name, constructor)				\
-	if (strcmp(type, name) == 0) {			\
-		return constructor();				\
+#define X(nm, constructor)									\
+	if (strcmp(type, nm) == 0) {							\
+		return constructor(type, name);						\
 	}
 	FILTER_LIST
 #undef X

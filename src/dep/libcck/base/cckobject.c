@@ -1,7 +1,7 @@
 /**
  * @file    cckobject.c
  * @authors Jan Breuer
- * @date   Mon Feb 24 09:20:21 CET 2014
+ * @date   Mon Feb 24 09:20:00 CET 2014
  * 
  * libcck base object
  */
@@ -9,7 +9,7 @@
 #include <string.h>
 #include "cckobject.h"
 
-void cckObjectNameSet(CCKObject * obj, const char * name) {
+static void nameSet(CCKObject * obj, const char * name) {
 	if (name != NULL) {
 		strncpy(obj->name, name, sizeof(obj->name));
 	} else {
@@ -17,12 +17,17 @@ void cckObjectNameSet(CCKObject * obj, const char * name) {
 	}
 }
 
-const char * cckObjectNameGet(CCKObject * obj) {
-	return obj->name;
+static void typeSet(CCKObject * obj, const char * type) {
+	if (type != NULL) {
+		strncpy(obj->type, type, sizeof(obj->type));
+	} else {
+		obj->type[0] = '\0';
+	}
 }
 
-void cckObjectInit(CCKObject * obj, const char * name) {
-	cckObjectNameSet(obj, name);
+void cckObjectInit(CCKObject * obj, const char * type, const char * name) {
+	typeSet(obj, name);
+	nameSet(obj, name);
 	obj->parent = NULL;
 	obj->next = NULL;
 }

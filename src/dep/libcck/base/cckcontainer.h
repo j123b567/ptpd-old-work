@@ -4,7 +4,7 @@
 /**
  * @file    cckcontainer.h
  * @authors Jan Breuer
- * @date   Mon Feb 24 09:20:21 CET 2014
+ * @date   Mon Feb 24 09:20:00 CET 2014
  * 
  * libcck base container
  */
@@ -21,7 +21,7 @@ typedef struct {
 
 #define CCK_CONTAINER(obj)		((CCKContainer *)obj)
 
-void cckContainerInit(CCKContainer * container);
+void cckContainerInit(CCKContainer * container, const char * type, const char * name);
 BOOL cckContainerAdd(CCKContainer * container, CCKObject * child);
 BOOL cckContainerRemove(CCKContainer * container, CCKObject * child);
 CCKObject * cckContainerGet(CCKContainer * container, const char * name);

@@ -85,7 +85,7 @@ static void ExponencialSmoothDestroy(Filter * filter)
 	free(esf);
 }
 
-Filter * ExponencialSmoothCreate(void)
+Filter * ExponencialSmoothCreate(const char * type, const char * name)
 {
 	ExponencialSmooth * esf;
 
@@ -94,6 +94,8 @@ Filter * ExponencialSmoothCreate(void)
 	if (!esf) {
 		return NULL;
 	}
+
+	cckObjectInit(CCK_OBJECT(esf), type, name);
 
 	esf->filter.feed = ExponencialSmoothFeed;
 	esf->filter.clear = ExponencialSmoothClear;

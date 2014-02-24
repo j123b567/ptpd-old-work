@@ -52,7 +52,7 @@ static void MovingAverageDestroy(Filter * filter)
 	free(maf);
 }
 
-Filter * MovingAverageCreate(void)
+Filter * MovingAverageCreate(const char * type, const char * name)
 {
 	MovingAverage * maf;
 
@@ -61,6 +61,8 @@ Filter * MovingAverageCreate(void)
 	if (!maf) {
 		return NULL;
 	}
+
+	cckObjectInit(CCK_OBJECT(maf), type, name);
 
 	maf->filter.feed = MovingAverageFeed;
 	maf->filter.clear = MovingAverageClear;

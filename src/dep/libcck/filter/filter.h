@@ -26,7 +26,7 @@ struct _Filter {
 };
 
 
-Filter * FilterCreate(const char * type);
+Filter * FilterCreate(const char * type, const char * name);
 
 void FilterDestroy(Filter * filter);
 
