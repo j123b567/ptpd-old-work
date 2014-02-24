@@ -21,12 +21,12 @@ FilterContainer * FilterContainerCreate(void) {
 	
 	fc = calloc(1, sizeof(FilterContainer));
 	
-	filterContainerInit(fc);
+	FilterContainerInit(fc);
 	
 	return fc;
 }
 
-void filterContainerInit(FilterContainer * container) {
+void FilterContainerInit(FilterContainer * container) {
     cckContainerInit(CCK_CONTAINER(container), "container_" CONTAINER_SECTION, CONTAINER_SECTION);
 }
 

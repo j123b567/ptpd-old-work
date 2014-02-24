@@ -21,7 +21,7 @@ struct _FilterContainer {
 
 FilterContainer * FilterContainerCreate(void);
 
-void filterContainerInit(FilterContainer * container);
+void FilterContainerInit(FilterContainer * container);
 
 void FilterContainerLoad(FilterContainer * container, dictionary * dict);
 

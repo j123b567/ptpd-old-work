@@ -28,7 +28,7 @@ ofm_filt = CCK_FILTER(cckContainerGet(fc, "ofm"));
 FilterClear(owd_filt);
 
 nanoseconds = 1000;
-FilterFeed(&nanoseconds);
+FilterFeed(owd_filt, &nanoseconds);
 
 /* cleanup */
 FilterContainerDestroy(fc);  
