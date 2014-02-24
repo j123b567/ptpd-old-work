@@ -11,8 +11,8 @@
 
 #include "../ccktypes.h"
 
-#define FILTER_EXPONENTIAL_SMOOTH       1
-#define FILTER_MOVING_AVERAGE           2
+#define FILTER_EXPONENTIAL_SMOOTH       "exps"
+#define FILTER_MOVING_AVERAGE           "mav"
 
 typedef struct _Filter Filter;
 
@@ -24,7 +24,7 @@ struct _Filter {
 };
 
 
-Filter * FilterCreate(int type);
+Filter * FilterCreate(const char * type);
 
 void FilterDestroy(Filter * filter);
 
