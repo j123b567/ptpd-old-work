@@ -16,12 +16,24 @@
 
 #define CONTAINER_SECTION	"filter"
 
-FilterContainer * filterContainerCreate(void) {
+FilterContainer * FilterContainerCreate(void) {
 	FilterContainer * fc;
 	
 	fc = calloc(1, sizeof(FilterContainer));
 	
+	filterContainerInit(fc);
+	
 	return fc;
+}
+
+void filterContainerInit(FilterContainer * container) {
+    cckContainerInit(CCK_CONTAINER(container), "container_" CONTAINER_SECTION, CONTAINER_SECTION);
+}
+
+void FilterContainerDestroy(FilterContainer * container) {
+    /* TODO: free all filters */
+    
+    free(container);
 }
 
 static int compare (const void * a, const void * b)
@@ -29,12 +41,13 @@ static int compare (const void * a, const void * b)
 	return strcmp((char *)a, (char*)b);
 }
 
-void filterContainerLoad(FilterContainer * container, dictionary * dict) {
+void FilterContainerLoad(FilterContainer * container, dictionary * dict) {
 	char ** seckeys;
 	int nkeys, i;
 	
 	char name[32];
-	char * key;
+	char * key0;
+	char * key1;
 	char * key2;
 	
 	CCKObject * child;
@@ -48,16 +61,20 @@ void filterContainerLoad(FilterContainer * container, dictionary * dict) {
 
 	/* create objects */
 	for(i = 0; i<nkeys; i++) {
-		key = sizeof(CONTAINER_SECTION) + seckeys[i];	// offset = section name + ':'
-		key2 = strchr (key, ':');
-		if (strncmp(name, key, key2-key) != 0) {
-			strncpy(name, key, key2-key);
+		/* full key e.g. filter:owd:type */
+		key0 = seckeys[i];
+		/* object key e.g. owd.type */
+		key1 = sizeof(CONTAINER_SECTION) + key0;
+		/* parameter key e.g. type */
+		key2 = strchr (key1, ':') + 1;
+		if (strncmp(name, key1, key2 - key1 - 1) != 0) {
+			strncpy(name, key1, key2 - key1 - 1);
 		}
 		
 		if (strcmp(key2, "type") == 0) {
 			/* test if object is not yet created */
 			if(cckContainerGet(CCK_CONTAINER(container), name) == NULL) {
-				child = CCK_OBJECT(FilterCreate(key2, name));
+				child = CCK_OBJECT(FilterCreate(iniparser_getstring(dict, key0, NULL), name));
 				if (child != NULL) {
 					cckContainerAdd(CCK_CONTAINER(container), child);
 				} else {
@@ -66,6 +83,31 @@ void filterContainerLoad(FilterContainer * container, dictionary * dict) {
 			} else {
 				/* TODO: exception - object already exists */
 			}
+		}
+	}
+	
+	/* configure objects */
+	name[0] = '\0';
+	child = NULL;
+
+	for(i = 0; i<nkeys; i++) {
+		/* full key e.g. filter:owd:type */
+		key0 = seckeys[i];
+		/* object key e.g. owd.type */
+		key1 = sizeof(CONTAINER_SECTION) + key0;
+		/* parameter key e.g. type */
+		key2 = strchr (key1, ':') + 1;
+		if (strncmp(name, key1, key2 - key1 - 1) != 0) {
+			strncpy(name, key1, key2 - key1 - 1);
+			child = cckContainerGet(CCK_CONTAINER(container), name);
+			if (child == NULL) {
+				/* TODO: exception - object does not exist */
+			}
+		}
+		
+		/* ignore "type" key */
+		if (strcmp(key2, "type") != 0) {
+			FilterConfigure(CCK_FILTER(child), key2, iniparser_getstring(dict, key0, NULL));
 		}
 	}
 

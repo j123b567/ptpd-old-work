@@ -26,6 +26,8 @@ struct _Filter {
 };
 
 
+#define CCK_FILTER(obj)		((Filter *)obj)
+
 Filter * FilterCreate(const char * type, const char * name);
 
 void FilterDestroy(Filter * filter);

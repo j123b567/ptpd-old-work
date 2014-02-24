@@ -26,7 +26,7 @@ static void typeSet(CCKObject * obj, const char * type) {
 }
 
 void cckObjectInit(CCKObject * obj, const char * type, const char * name) {
-	typeSet(obj, name);
+	typeSet(obj, type);
 	nameSet(obj, name);
 	obj->parent = NULL;
 	obj->next = NULL;

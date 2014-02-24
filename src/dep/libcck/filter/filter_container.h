@@ -10,6 +10,7 @@
  */
 
 #include "../base/cckcontainer.h"
+#include "../../iniparser/dictionary.h"
 
 
 typedef struct _FilterContainer FilterContainer;
@@ -18,6 +19,13 @@ struct _FilterContainer {
 	CCKContainer cckc;
 };
 
+FilterContainer * FilterContainerCreate(void);
+
+void filterContainerInit(FilterContainer * container);
+
+void FilterContainerLoad(FilterContainer * container, dictionary * dict);
+
+void FilterContainerDestroy(FilterContainer * container);
 
 #endif /* _LIBCCK_FILTER_FILTER_CONTAINER_H_ */
 
