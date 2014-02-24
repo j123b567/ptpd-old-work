@@ -27,17 +27,19 @@ static void MovingAverageClear(Filter * filter)
 	maf->x_prev = 0;
 }
 
-static double MovingAverageFeed(Filter * filter, double val)
+static BOOL MovingAverageFeed(Filter * filter, int32_t * value)
 {
 	MovingAverage * maf = (MovingAverage *)filter;
-	int32_t x = (int32_t)(val);
+	int32_t x = *value;
 
 	maf->y = x / 2 + maf->x_prev / 2;
 	maf->x_prev = x;
-	return maf->y;
+	
+	*value = maf->y;
+	return TRUE;
 }
 
-static void MovingAverageConfigure(Filter *filter, const char * parameter, double value)
+static void MovingAverageConfigure(Filter *filter, const char * parameter, const char * value)
 {
 	(void) filter;
 	(void) parameter;

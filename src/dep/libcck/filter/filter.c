@@ -35,12 +35,12 @@ void FilterClear(Filter * filter)
 	filter->clear(filter);
 }
 
-double FilterFeed(Filter * filter, double val)
+BOOL FilterFeed(Filter * filter, int32_t * val)
 {
 	return filter->feed(filter, val);
 }
 
-void FilterConfigure(Filter *filter, const char * parameter, double value)
+void FilterConfigure(Filter *filter, const char * parameter, const char * value)
 {
 	return filter->configure(filter, parameter, value);
 }
