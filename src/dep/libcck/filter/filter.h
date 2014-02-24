@@ -9,7 +9,8 @@
  * filter API
  */
 
-#include "../ccktypes.h"
+#include "../base/ccktypes.h"
+#include "../base/cckobject.h"
 
 #define FILTER_EXPONENTIAL_SMOOTH       "exps"
 #define FILTER_MOVING_AVERAGE           "mav"
@@ -17,6 +18,7 @@
 typedef struct _Filter Filter;
 
 struct _Filter {
+	CCKObject ccko;
 	BOOL (*feed)(Filter *filter, int32_t * value);
 	void (*clear)(Filter *filter);
 	void (*destroy)(Filter *filter);

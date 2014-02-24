@@ -12,38 +12,11 @@
 
 #include "filter.h"
 #include "exponencial_smooth.h"
+#include "../base/parameters.h"
 
 	/* X(var, type, name, default) */
 #define PARAMETER_LIST	\
 	X(s, int, "stiffness", 6)
-
-#include <stdio.h>
-double doubleGet(const char * val, double defValue) {
-	double result;
-	if (val == NULL) {
-		result = defValue;
-	} else {
-		if (sscanf(val, " %lf ", &result) != 1) {
-			result = defValue;
-		}
-	}
-
-	return result;
-}
-
-int32_t intGet(const char * val, int defValue) {
-	int32_t result;
-	if (val == NULL) {
-		result = defValue;
-	} else {
-		if (sscanf(val, " %d ", &result) != 1) {
-			result = defValue;
-		}
-	}
-
-	return result;
-}
-
 
 typedef struct
 {
