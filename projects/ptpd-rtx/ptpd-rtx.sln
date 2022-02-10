@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ptpd-rtx", "ptpd-rtx.vcxproj", "{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+		RTSSDebug|Win32 = RTSSDebug|Win32
+		RTSSRelease|Win32 = RTSSRelease|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.Debug|Win32.Build.0 = Debug|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.Release|Win32.ActiveCfg = Release|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.Release|Win32.Build.0 = Release|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.RTSSDebug|Win32.ActiveCfg = RTSSDebug|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.RTSSDebug|Win32.Build.0 = RTSSDebug|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.RTSSRelease|Win32.ActiveCfg = RTSSRelease|Win32
+		{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}.RTSSRelease|Win32.Build.0 = RTSSRelease|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

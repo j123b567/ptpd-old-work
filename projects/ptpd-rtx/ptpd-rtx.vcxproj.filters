@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+    <Filter Include="Source Files\dep">
+      <UniqueIdentifier>{e3195a6d-008a-4e26-8d29-c707d584cf05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\dep\freegetopt">
+      <UniqueIdentifier>{e1f81c91-702a-4ea3-bfb2-463e78a98a6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dep">
+      <UniqueIdentifier>{5f45bbdd-f587-452b-a632-8ec32507a3b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dep\freegetopt">
+      <UniqueIdentifier>{d1acbbc9-163f-4295-9f72-0784365f6a54}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\arith.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\bmc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\display.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\management.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\protocol.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ptpd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\msg.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\net.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\servo.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\startup.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\sys.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\timer.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\freegetopt\getopt.c">
+      <Filter>Source Files\dep\freegetopt</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\net_rtss.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\sys_rtss.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\dep\timescale.c">
+      <Filter>Source Files\dep</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\constants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\datatypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\ptpd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\constants_dep.h">
+      <Filter>Header Files\dep</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\datatypes_dep.h">
+      <Filter>Header Files\dep</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\ptpd_dep.h">
+      <Filter>Header Files\dep</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\freegetopt\getopt.h">
+      <Filter>Header Files\dep\freegetopt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\constants_rtss.h">
+      <Filter>Header Files\dep</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\dep\timescale.h">
+      <Filter>Header Files\dep</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

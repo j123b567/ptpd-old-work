@@ -1,0 +1,270 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RTSSDebug|Win32">
+      <Configuration>RTSSDebug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RTSSRelease|Win32">
+      <Configuration>RTSSRelease</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DE671DDA-8042-46E2-87A5-7FEC571C7D1C}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>ptpdrtx</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.30128.1</_ProjectFileVersion>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'">.rtss</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'">false</GenerateManifest>
+    <EmbedManifest Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'">false</EmbedManifest>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'">.rtss</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'">false</GenerateManifest>
+    <EmbedManifest Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'">false</EmbedManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RtxSdkDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>OldStyle</DebugInformationFormat>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;VISUALSTUDIO=100;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(IntDir)/$(ProjectName).pdb</ProgramDataBaseFileName>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <Link>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(RtxSdkDir)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>rtapi_w32.lib;libcmtd.lib;oldnames.lib;kernel32.lib;ws2_32.lib;mswsock.lib;advapi32.lib</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
+      <TargetMachine>MachineX86</TargetMachine>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RtxSdkDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Full</Optimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <PreprocessorDefinitions>WIN32;NDEBUG;RELEASE;VISUALSTUDIO=100;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(IntDir)/$(ProjectName).pdb</ProgramDataBaseFileName>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <Link>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(RtxSdkDir)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>rtapi_w32.lib;libcmt.lib;oldnames.lib;kernel32.lib;ws2_32.lib;mswsock.lib;advapi32.lib</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
+      <TargetMachine>MachineX86</TargetMachine>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RTSSDebug|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RtxSdkDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>OldStyle</DebugInformationFormat>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <PreprocessorDefinitions>WIN32;UNDER_RTSS;_WSPIAPI_H_;_DEBUG;VISUALSTUDIO=100;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(IntDir)/$(ProjectName).pdb</ProgramDataBaseFileName>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <Link>
+      <OutputFile>$(OutDir)/$(ProjectName).rtss</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(RtxSdkDir)\lib; $(RtxSdkDir)\lib\VisualStudio10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>startupCRT.obj;rtxlibcmt.lib;oldnames.lib;rtapi_rtss.lib;rtx_rtss.lib;rtxtcpip.lib</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries>libc;libcd;libcmt;libcmtd;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Native</SubSystem>
+      <Driver>Driver</Driver>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
+      <EntryPointSymbol>_RtapiProcessEntryCRT%408</EntryPointSymbol>
+      <RandomizedBaseAddress>
+      </RandomizedBaseAddress>
+      <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalOptions>/align:0x20 %(AdditionalOptions)</AdditionalOptions>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+    <Manifest>
+      <OutputManifestFile>$(TargetPath).manifest</OutputManifestFile>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RTSSRelease|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RtxSdkDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Full</Optimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <PreprocessorDefinitions>WIN32;UNDER_RTSS;_WSPIAPI_H_;NDEBUG;RELEASE;VISUALSTUDIO=100;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(IntDir)/$(ProjectName).pdb</ProgramDataBaseFileName>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <Link>
+      <OutputFile>$(OutDir)/$(ProjectName).rtss</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(RtxSdkDir)\lib; $(RtxSdkDir)\lib\VisualStudio10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>startupCRT.obj;rtxlibcmt.lib;oldnames.lib;rtapi_rtss.lib;rtx_rtss.lib;rtxtcpip.lib</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries>libc;libcd;libcmt;libcmtd;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <SubSystem>Native</SubSystem>
+      <Driver>Driver</Driver>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
+      <EntryPointSymbol>_RtapiProcessEntryCRT%408</EntryPointSymbol>
+      <RandomizedBaseAddress>
+      </RandomizedBaseAddress>
+      <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalOptions>/align:0x20 %(AdditionalOptions)</AdditionalOptions>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+    <Manifest>
+      <OutputManifestFile>$(TargetPath).manifest</OutputManifestFile>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\arith.c" />
+    <ClCompile Include="..\..\src\bmc.c" />
+    <ClCompile Include="..\..\src\dep\freegetopt\getopt.c" />
+    <ClCompile Include="..\..\src\dep\msg.c" />
+    <ClCompile Include="..\..\src\dep\net.c" />
+    <ClCompile Include="..\..\src\dep\net_rtss.c" />
+    <ClCompile Include="..\..\src\dep\servo.c" />
+    <ClCompile Include="..\..\src\dep\startup.c" />
+    <ClCompile Include="..\..\src\dep\sys.c" />
+    <ClCompile Include="..\..\src\dep\sys_rtss.c" />
+    <ClCompile Include="..\..\src\dep\timer.c" />
+    <ClCompile Include="..\..\src\dep\timescale.c" />
+    <ClCompile Include="..\..\src\display.c" />
+    <ClCompile Include="..\..\src\management.c" />
+    <ClCompile Include="..\..\src\protocol.c" />
+    <ClCompile Include="..\..\src\ptpd.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\constants.h" />
+    <ClInclude Include="..\..\src\datatypes.h" />
+    <ClInclude Include="..\..\src\dep\constants_dep.h" />
+    <ClInclude Include="..\..\src\dep\constants_rtss.h" />
+    <ClInclude Include="..\..\src\dep\datatypes_dep.h" />
+    <ClInclude Include="..\..\src\dep\freegetopt\getopt.h" />
+    <ClInclude Include="..\..\src\dep\ptpd_dep.h" />
+    <ClInclude Include="..\..\src\dep\timescale.h" />
+    <ClInclude Include="..\..\src\ptpd.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
